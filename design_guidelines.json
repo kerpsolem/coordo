@@ -1,0 +1,113 @@
+{
+  "theme": "light_and_dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) tailored for high-density SaaS scheduling and medical/educational environments",
+  "design_philosophy": "High legibility, explicitly structured grids, clear state separation between reading and editing. Fast-scanning is prioritized over decorative elements. A clinical, organized aesthetic with warm human touches like the daily quote/saint.",
+  "colors": {
+    "light": {
+      "background": "bg-slate-50",
+      "surface": "bg-white",
+      "surface_secondary": "bg-slate-100",
+      "primary": "bg-slate-900 text-white",
+      "primary_hover": "hover:bg-slate-800",
+      "secondary": "bg-white border border-slate-200 text-slate-900",
+      "border": "border-slate-200",
+      "border_focus": "focus:border-slate-400 focus:ring-slate-400/20",
+      "text_primary": "text-slate-900",
+      "text_secondary": "text-slate-500",
+      "coordination_mode_accent": "bg-amber-500 text-white",
+      "coordination_mode_surface": "bg-amber-50",
+      "absence_banner": "bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(226,232,240,0.5)_10px,rgba(226,232,240,0.5)_20px)] border-slate-300 text-slate-700"
+    },
+    "dark": {
+      "background": "bg-slate-950",
+      "surface": "bg-slate-900",
+      "surface_secondary": "bg-slate-800",
+      "primary": "bg-white text-slate-900",
+      "primary_hover": "hover:bg-slate-200",
+      "secondary": "bg-slate-900 border border-slate-800 text-slate-100",
+      "border": "border-slate-800",
+      "border_focus": "focus:border-slate-600 focus:ring-slate-600/20",
+      "text_primary": "text-slate-50",
+      "text_secondary": "text-slate-400",
+      "coordination_mode_accent": "bg-amber-600 text-white",
+      "coordination_mode_surface": "bg-amber-950/30",
+      "absence_banner": "bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(30,41,59,0.8)_10px,rgba(30,41,59,0.8)_20px)] border-slate-700 text-slate-300"
+    },
+    "planning_blocks": {
+      "cm": "bg-indigo-200 border-indigo-300 text-black",
+      "td": "bg-emerald-200 border-emerald-300 text-black",
+      "tp": "bg-amber-200 border-amber-300 text-black",
+      "stage": "bg-sky-200 border-sky-300 text-black",
+      "evaluation": "bg-rose-200 border-rose-300 text-black",
+      "note": "Per requirements: 'initiales des formateurs en noir' - The block colors must remain pastel/light even in dark mode to ensure the black text remains accessible and highly readable."
+    }
+  },
+  "typography": {
+    "headings": {
+      "family": "font-sans",
+      "recommended_font": "Outfit",
+      "h1": "text-3xl sm:text-4xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "h4": "text-lg font-medium",
+      "color": "text-slate-900 dark:text-white"
+    },
+    "body": {
+      "family": "font-mono",
+      "recommended_font": "IBM Plex Sans",
+      "base": "text-sm leading-relaxed",
+      "small": "text-xs text-slate-500 dark:text-slate-400",
+      "color": "text-slate-700 dark:text-slate-300"
+    },
+    "data_tables": {
+      "header": "text-xs font-semibold tracking-[0.05em] uppercase text-slate-500 dark:text-slate-400",
+      "cell": "text-sm text-slate-900 dark:text-slate-100"
+    }
+  },
+  "layout_and_spacing": {
+    "general": {
+      "container": "max-w-[1920px] mx-auto w-full",
+      "sidebar_width": "w-72",
+      "sidebar_behavior": "fixed left-0 top-0 h-screen",
+      "main_content": "ml-72 min-h-screen p-8",
+      "section_spacing": "space-y-8"
+    },
+    "grids": {
+      "dashboard_bento": "grid grid-cols-1 md:grid-cols-4 gap-6",
+      "calendar_month": "grid grid-cols-7 border-l border-t border-slate-200 dark:border-slate-800",
+      "calendar_timeline": "grid grid-cols-[150px_1fr] border border-slate-200 dark:border-slate-800",
+      "multi_promotion_split": "grid grid-cols-1 xl:grid-cols-2 gap-8"
+    },
+    "components": {
+      "card": "bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm p-6",
+      "planning_block": "rounded-md p-2 text-sm font-medium transition-all hover:-translate-y-[1px] hover:shadow-md border",
+      "sticky_note": "bg-yellow-100/90 dark:bg-yellow-900/40 border border-yellow-200 dark:border-yellow-700 p-4 shadow-sm backdrop-blur-sm transform rotate-1 hover:rotate-0 transition-transform cursor-grab",
+      "sidebar_link": "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800",
+      "sidebar_link_active": "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+    }
+  },
+  "visual_enhancers": {
+    "hover_states": "Crisp and clear ('propre et net'). Use solid 1px borders or strong background shifts. No blurry shadows on data rows.",
+    "mode_separation": "The sidebar MUST visually indicate the mode. When in 'Coordination' (Edit) mode, add an amber/warning border-top to the app, change the active sidebar section background to amber-50 (light) or amber-900/20 (dark), and display an 'ÉDITION' badge.",
+    "shadows": "Minimal. Rely on 1px borders ('Grid Borders / Technical Look') to separate elements. Only use shadows for floating elements like Sticky Notes or dropdowns.",
+    "dashboard_quote": "Render the daily saint and philosopher quote in a visually distinct, perhaps serif or italicized, softer component at the top of the dashboard to contrast the rigid data grids."
+  },
+  "component_instructions": {
+    "navigation": "Sidebar must have two explicit, uncollapsible category headers: 'CONSULTATION' and 'COORDINATION'.",
+    "calendar_views": "Must support Day, Week, Month, and Timeline. For multi-promotion view ('plusieurs promotions'), display calendars side-by-side using the xl:grid-cols-2 layout.",
+    "absence_blocks": "Apply the 'absence_banner' class (repeating-linear-gradient) over the schedule grid, clearly overriding or blocking out standard planning slots.",
+    "instructor_initials": "Inside planning blocks, strictly apply 'text-black font-bold' to the initials so they pop out immediately against the pastel block backgrounds.",
+    "sticky_notes": "Use a masonry or flex-wrap layout for the 'Coordination' sticky board. Allow drag-and-drop visuals.",
+    "shadcn_customization": "Override default Shadcn DataTables to be denser (py-2 instead of py-4). Override standard card radius from default to a more rigid rounded-md for a structured, professional software feel."
+  },
+  "media_urls": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1629410484397-a4dcd74088a0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwyfHxjbGVhbiUyMG1vZGVybiUyMGhvc3BpdGFsJTIwaGFsbHdheXxlbnwwfHx8fDE3NzYyNTYyODV8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Clean modern hospital hallway, used for authentication/login screen background with a blur or white overlay."
+    }
+  },
+  "testing": {
+    "attributes_required": true,
+    "instructions": "All interactive elements, specifically calendar toggles, mode switch buttons, sticky notes, and navigation links MUST include a data-testid attribute (e.g., data-testid='mode-toggle-button', data-testid='nav-consultation-dashboard')."
+  }
+}
