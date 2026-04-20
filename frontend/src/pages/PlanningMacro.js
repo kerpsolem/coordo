@@ -207,7 +207,7 @@ export default function PlanningMacro() {
                                         onClick={(e) => { e.stopPropagation(); isAdmin && editPreSaisie(s); }}
                                         onMouseEnter={() => setHoveredItem(s)}
                                         onMouseLeave={() => setHoveredItem(null)}>
-                                        {at.nom} {s.intitule ? `- ${s.intitule}` : ''}
+                                        {at.nom}
                                       </div>
                                     );
                                   })}
