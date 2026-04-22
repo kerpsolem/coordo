@@ -1,26 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import API from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, CardContent } from '../components/ui/card';
+import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
-import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, GripVertical, ZoomIn, ZoomOut, MessageSquare } from 'lucide-react';
 import { format, addDays, startOfWeek, getWeek, addWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 function timeToMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
-function minToTime(m) { const h = Math.floor(m / 15) * 15; const hh = Math.floor(h / 60); const mm = h % 60; return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+function minToTime(m) { const h = Math.floor(m / 15) * 15; return `${String(Math.floor(h / 60)).padStart(2,'0')}:${String(h % 60).padStart(2,'0')}`; }
 function snapTo15(m) { return Math.round(m / 15) * 15; }
-
 const START_MIN = 7 * 60 + 30;
 const END_MIN = 18 * 60;
 const TOTAL_MIN = END_MIN - START_MIN;
-const PX_PER_MIN = 1.2;
-const GRID_H = Math.round(TOTAL_MIN * PX_PER_MIN);
 
 export default function PlanningGlobal() {
   const { isAdmin } = useAuth();
@@ -41,14 +38,18 @@ export default function PlanningGlobal() {
   const [showDialog, setShowDialog] = useState(false);
   const [hoveredSession, setHoveredSession] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
 
-  // Drag state for moving/resizing existing sessions
   const [dragInfo, setDragInfo] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
+  const [createDrag, setCreateDrag] = useState(null);
+  const [createPreview, setCreatePreview] = useState(null);
+  const createDragMoved = useRef(false);
 
-  // Click-drag state for creating new sessions
-  const [createDrag, setCreateDrag] = useState(null); // { dayStr, startY, colTop, startMin }
-  const [createPreview, setCreatePreview] = useState(null); // { top, height, startTime, endTime }
+  const PX_PER_MIN = 1.2 * zoom;
+  const GRID_H = Math.round(TOTAL_MIN * PX_PER_MIN);
+  const baseFontBlock = Math.round(10 * zoom);
+  const baseFontSmall = Math.round(9 * zoom);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekNum = getWeek(currentDate, { weekStartsOn: 1 });
@@ -101,18 +102,30 @@ export default function PlanningGlobal() {
   const deleteSession = async (id) => { if (!window.confirm('Supprimer cette seance ?')) return; try { await API.delete(`/sessions/${id}`); setShowDialog(false); loadData(); } catch (e) { console.error(e); } };
   const toggleField = async (id, field, value) => { try { await API.patch(`/sessions/${id}/toggle`, { field, value }); loadData(); } catch (e) { console.error(e); } };
 
-  // ---- DRAG & RESIZE ----
+  // ---- MOVE/RESIZE existing sessions ----
   const handleDragStart = (e, session, mode) => {
     if (!isAdmin) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const startMin = timeToMin(session.heure_debut);
-    const endMin = timeToMin(session.heure_fin);
-    const top = (startMin - START_MIN) * PX_PER_MIN;
-    const height = (endMin - startMin) * PX_PER_MIN;
+    e.stopPropagation(); e.preventDefault();
+    const startMin = timeToMin(session.heure_debut), endMin = timeToMin(session.heure_fin);
+    const top = (startMin - START_MIN) * PX_PER_MIN, height = (endMin - startMin) * PX_PER_MIN;
     setDragInfo({ sessionId: session.id, session, mode, startY: e.clientY, origTop: top, origHeight: height, origStart: startMin, origEnd: endMin });
     setDragPreview({ top, height, startTime: session.heure_debut, endTime: session.heure_fin });
     setHoveredSession(null);
+  };
+
+  // ---- CREATE by click-drag on empty grid ----
+  const handleGridMouseDown = (e, dayStr) => {
+    if (!isAdmin || dragInfo || e.button !== 0) return;
+    // Check if click was on a session block (has planning-block parent)
+    if (e.target.closest('.planning-block')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const clickMin = snapTo15(START_MIN + offsetY / PX_PER_MIN);
+    if (clickMin < START_MIN || clickMin >= END_MIN) return;
+    createDragMoved.current = false;
+    setCreateDrag({ dayStr, startY: e.clientY, colTop: rect.top, startMin: clickMin });
+    setCreatePreview({ top: (clickMin - START_MIN) * PX_PER_MIN, height: 15 * PX_PER_MIN, startTime: minToTime(clickMin), endTime: minToTime(clickMin + 15) });
+    e.preventDefault();
   };
 
   const handleGlobalMouseMove = useCallback((e) => {
@@ -123,39 +136,35 @@ export default function PlanningGlobal() {
         const newStart = Math.max(START_MIN, Math.min(END_MIN - (dragInfo.origEnd - dragInfo.origStart), dragInfo.origStart + deltaMins));
         const dur = dragInfo.origEnd - dragInfo.origStart;
         setDragPreview({ top: (newStart - START_MIN) * PX_PER_MIN, height: dur * PX_PER_MIN, startTime: minToTime(newStart), endTime: minToTime(newStart + dur) });
-      } else if (dragInfo.mode === 'resize-bottom') {
+      } else {
         const newEnd = Math.max(dragInfo.origStart + 15, Math.min(END_MIN, dragInfo.origEnd + deltaMins));
         setDragPreview({ top: dragInfo.origTop, height: (newEnd - dragInfo.origStart) * PX_PER_MIN, startTime: minToTime(dragInfo.origStart), endTime: minToTime(newEnd) });
       }
     }
     if (createDrag) {
+      createDragMoved.current = true;
       const deltaY = e.clientY - createDrag.startY;
       const endMin = snapTo15(Math.max(createDrag.startMin + 15, Math.min(END_MIN, createDrag.startMin + deltaY / PX_PER_MIN)));
-      const top = (createDrag.startMin - START_MIN) * PX_PER_MIN;
-      const height = (endMin - createDrag.startMin) * PX_PER_MIN;
-      setCreatePreview({ top, height, startTime: minToTime(createDrag.startMin), endTime: minToTime(endMin) });
+      setCreatePreview({ top: (createDrag.startMin - START_MIN) * PX_PER_MIN, height: (endMin - createDrag.startMin) * PX_PER_MIN, startTime: minToTime(createDrag.startMin), endTime: minToTime(endMin) });
     }
-  }, [dragInfo, createDrag]);
+  }, [dragInfo, createDrag, PX_PER_MIN]);
 
   const handleGlobalMouseUp = useCallback(async () => {
     if (dragInfo && dragPreview) {
-      try {
-        await API.put(`/sessions/${dragInfo.sessionId}`, { ...dragInfo.session, heure_debut: dragPreview.startTime, heure_fin: dragPreview.endTime });
-        loadData();
-      } catch (e) { console.error(e); }
-      setDragInfo(null); setDragPreview(null);
-      return;
+      try { await API.put(`/sessions/${dragInfo.sessionId}`, { ...dragInfo.session, heure_debut: dragPreview.startTime, heure_fin: dragPreview.endTime }); loadData(); } catch (e) { console.error(e); }
+      setDragInfo(null); setDragPreview(null); return;
     }
     if (createDrag && createPreview) {
-      setHoveredSession(null);
-      setEditSession({
-        date: createDrag.dayStr, heure_debut: createPreview.startTime, heure_fin: createPreview.endTime,
-        type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
-        group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: ''
-      });
-      setShowDialog(true);
-      setCreateDrag(null); setCreatePreview(null);
-      return;
+      if (createDragMoved.current) {
+        setHoveredSession(null);
+        setEditSession({
+          date: createDrag.dayStr, heure_debut: createPreview.startTime, heure_fin: createPreview.endTime,
+          type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
+          group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: ''
+        });
+        setShowDialog(true);
+      }
+      setCreateDrag(null); setCreatePreview(null); return;
     }
     setDragInfo(null); setDragPreview(null); setCreateDrag(null); setCreatePreview(null);
   }, [dragInfo, dragPreview, createDrag, createPreview, loadData, selectedPromos]);
@@ -169,44 +178,56 @@ export default function PlanningGlobal() {
   }, [dragInfo, createDrag, handleGlobalMouseMove, handleGlobalMouseUp]);
 
   const handleMouseEnter = (e, s) => {
-    if (dragInfo) return;
+    if (dragInfo || createDrag) return;
     const r = e.currentTarget.getBoundingClientRect();
     setTooltipPos({ x: Math.min(r.right + 8, window.innerWidth - 320), y: Math.min(r.top, window.innerHeight - 320) });
     setHoveredSession(s);
   };
 
-  const renderBlock = (s, blockTop, blockHeight) => {
+  const renderBlock = (s) => {
     const at = atMap[s.type_activite_id] || {};
     const ue = ueMap[s.ue_id] || {};
     const grp = grpMap[s.group_id] || {};
     const formNames = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
     const isDragging = dragInfo?.sessionId === s.id;
-    const showPreview = isDragging && dragPreview;
 
     return (
       <div key={s.id} data-testid={`session-block-${s.id}`}
-        className={`planning-block px-1 py-0.5 text-[10px] overflow-hidden border-l-2 leading-tight h-full relative select-none
+        className={`planning-block px-1 py-0.5 overflow-hidden border-l-2 leading-tight h-full relative select-none
           ${isDragging ? 'opacity-40' : 'cursor-pointer'}`}
-        style={{ backgroundColor: at.couleur ? `${at.couleur}25` : '#e2e8f0', borderLeftColor: at.couleur || '#94a3b8' }}
-        onClick={(e) => { e.stopPropagation(); if (!dragInfo) isAdmin && startEdit(s); }}
-        onMouseEnter={(e) => handleMouseEnter(e, s)} onMouseLeave={() => !dragInfo && setHoveredSession(null)}>
+        style={{ backgroundColor: at.couleur ? `${at.couleur}25` : '#e2e8f0', borderLeftColor: at.couleur || '#94a3b8', fontSize: baseFontBlock }}
+        onClick={(e) => { e.stopPropagation(); if (!dragInfo && !createDrag) startEdit(s); }}
+        onMouseEnter={(e) => handleMouseEnter(e, s)} onMouseLeave={() => !(dragInfo || createDrag) && setHoveredSession(null)}>
         {/* Move handle */}
         {isAdmin && (
-          <div className="absolute top-0 left-0 right-0 h-3 cursor-grab active:cursor-grabbing z-10 flex items-center justify-center"
+          <div className="absolute top-0 left-0 right-0 h-4 cursor-grab active:cursor-grabbing z-10 flex items-center justify-center"
             onMouseDown={(e) => handleDragStart(e, s, 'move')}>
             <GripVertical size={8} className="text-slate-400 opacity-0 hover:opacity-100" />
           </div>
         )}
-        <div className="flex items-center gap-0.5 mt-0.5">
+        <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
           <span className="font-bold" style={{ color: at.couleur }}>{at.nom}</span>
-          {ue.code_ue && <span className="text-slate-500">{ue.code_ue}</span>}
-          {s.statut === 'Valide' && <Check size={7} className="text-green-600 flex-shrink-0" />}
-          {s.saisi && <Edit2 size={7} className="text-blue-500 flex-shrink-0" />}
+          {ue.code_ue && <span className="text-slate-500" style={{ fontSize: baseFontSmall }}>{ue.code_ue}</span>}
+          {s.statut === 'Valide' && (
+            <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400" style={{ fontSize: baseFontSmall - 1 }}>
+              <Check size={baseFontSmall} /> V
+            </span>
+          )}
+          {s.saisi && (
+            <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400" style={{ fontSize: baseFontSmall - 1 }}>
+              <Edit2 size={baseFontSmall} /> S
+            </span>
+          )}
         </div>
-        {s.intitule && <div className="truncate text-[9px] text-slate-600 dark:text-slate-300">{s.intitule}</div>}
-        <div className="text-[9px] text-slate-500">{s.heure_debut}-{s.heure_fin}{grp.libelle ? ` · ${grp.libelle}` : ''}</div>
+        {s.intitule && <div className="truncate text-slate-600 dark:text-slate-300" style={{ fontSize: baseFontSmall }}>{s.intitule}</div>}
+        <div className="text-slate-500" style={{ fontSize: baseFontSmall }}>{s.heure_debut}-{s.heure_fin}{grp.libelle ? ` · ${grp.libelle}` : ''}</div>
         <div className="font-bold text-black">{formNames}</div>
-        {/* Resize handle bottom */}
+        {s.commentaire && (
+          <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 truncate" style={{ fontSize: baseFontSmall - 1 }}>
+            <MessageSquare size={baseFontSmall - 1} />{s.commentaire}
+          </div>
+        )}
+        {/* Resize handle */}
         {isAdmin && (
           <div className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize z-10 group"
             onMouseDown={(e) => handleDragStart(e, s, 'resize-bottom')}>
@@ -218,22 +239,22 @@ export default function PlanningGlobal() {
   };
 
   const renderDragOverlay = () => {
-    const preview = dragInfo && dragPreview ? dragPreview : createDrag && createPreview ? createPreview : null;
+    const preview = (dragInfo && dragPreview) ? dragPreview : (createDrag && createPreview && createDragMoved.current) ? createPreview : null;
     if (!preview) return null;
     const durMin = timeToMin(preview.endTime) - timeToMin(preview.startTime);
     return (
-      <div className="fixed z-[200] pointer-events-none" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
-        <div className="fixed bg-white dark:bg-slate-800 border-2 border-blue-500 rounded-lg shadow-2xl px-3 py-2 z-[201]"
+      <div className="fixed z-[200] pointer-events-none inset-0">
+        <div className="fixed bg-white dark:bg-slate-800 border-2 border-blue-500 rounded-lg shadow-2xl px-3 py-2"
           style={{ left: '50%', top: 12, transform: 'translateX(-50%)' }}>
           <span className="text-sm font-bold text-blue-600">{preview.startTime} - {preview.endTime}</span>
-          <span className="text-xs text-slate-500 ml-2">({Math.round(durMin / 60 * 100) / 100}h)</span>
+          <span className="text-xs text-slate-500 ml-2">({(durMin / 60).toFixed(1)}h)</span>
         </div>
       </div>
     );
   };
 
   const renderTooltip = () => {
-    if (!hoveredSession || dragInfo || showDialog) return null;
+    if (!hoveredSession || dragInfo || showDialog || createDrag) return null;
     const s = hoveredSession, at = atMap[s.type_activite_id] || {}, promo = promoMap[s.promotion_id] || {};
     const ue = ueMap[s.ue_id] || {}, dom = domMap[s.domain_id] || domMap[ue.domain_id] || {};
     const site = siteMap[s.site_id] || {}, grp = grpMap[s.group_id] || {};
@@ -245,7 +266,8 @@ export default function PlanningGlobal() {
           <div className="w-3 h-3 rounded" style={{ backgroundColor: at.couleur }} />
           <span className="font-bold text-sm">{at.nom}</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700">{s.semestre}</span>
-          {s.statut === 'Valide' && <span className="text-[10px] px-1 py-0.5 rounded bg-green-100 text-green-700">Valide</span>}
+          {s.statut === 'Valide' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">Valide</span>}
+          {s.saisi && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">Saisi</span>}
         </div>
         {s.intitule && <p className="text-sm font-semibold mb-2">{s.intitule}</p>}
         <div className="grid grid-cols-[100px_1fr] gap-y-1 text-xs">
@@ -257,7 +279,7 @@ export default function PlanningGlobal() {
           <span className="text-slate-500">Lieu</span><span>{site.nom || '-'}</span>
           <span className="text-slate-500">Horaires</span><span className="font-medium">{s.heure_debut} - {s.heure_fin}</span>
           <span className="text-slate-500">Duree</span><span>{s.duree}h</span>
-          <span className="text-slate-500">Saisi</span><span>{s.saisi ? 'Oui' : 'Non'}</span>
+          {s.commentaire && <><span className="text-slate-500">Commentaire</span><span className="text-amber-600">{s.commentaire}</span></>}
         </div>
       </div>
     );
@@ -267,78 +289,60 @@ export default function PlanningGlobal() {
     const promoSessions = promoId === 'all' ? sessions : sessions.filter(s => s.promotion_id === promoId);
     return (
       <Card className="overflow-hidden">
-        {promoName && <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b text-sm font-semibold">{promoName}</div>}
+        {promoName && <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b font-semibold" style={{ fontSize: 13 * zoom }}>{promoName}</div>}
         <div className="overflow-x-auto">
-          <div className="grid min-w-[700px]" style={{ gridTemplateColumns: '50px repeat(5, 1fr)' }}>
-            {/* Day headers */}
+          <div className="grid" style={{ gridTemplateColumns: `${Math.round(50 * zoom)}px repeat(5, 1fr)`, minWidth: Math.round(700 * zoom) }}>
             <div className="border-b border-r border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/30" />
             {days.map((day, i) => {
               const dayAbs = getAbsForDay(format(day, 'yyyy-MM-dd'));
               return (
                 <div key={i} className="border-b border-r border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/30">
-                  <div className="text-[10px] text-slate-500 capitalize pt-1">{format(day, 'EEEE', { locale: fr })}</div>
-                  <div className="text-xs font-bold pb-1">{format(day, 'd MMM', { locale: fr })}</div>
+                  <div className="text-slate-500 capitalize pt-1" style={{ fontSize: baseFontSmall }}>{format(day, 'EEEE', { locale: fr })}</div>
+                  <div className="font-bold pb-1" style={{ fontSize: baseFontBlock + 1 }}>{format(day, 'd MMM', { locale: fr })}</div>
                   {dayAbs.length > 0 && (
-                    <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-800 px-1 py-0.5 text-[9px] text-red-600 font-medium">
+                    <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-800 px-1 py-0.5 text-red-600 font-medium" style={{ fontSize: baseFontSmall - 1 }}>
                       Abs: {dayAbs.join(', ')}
                     </div>
                   )}
                 </div>
               );
             })}
-
-            {/* Time column + day columns */}
-            <div className="border-r border-slate-200 dark:border-slate-700 relative bg-slate-50/50 dark:bg-slate-800/20" style={{ height: GRID_H }}>
-              {Array.from({ length: 22 }, (_, i) => { const h = 7 + Math.floor((i + 1) / 2); const m = (i + 1) % 2 === 0 ? '30' : '00'; return { h, m, label: m === '00' ? `${h}:00` : '', min: h * 60 + parseInt(m) }; })
+            {/* Time col */}
+            <div className="border-r border-slate-200 dark:border-slate-700 relative bg-slate-50/50" style={{ height: GRID_H }}>
+              {Array.from({ length: 22 }, (_, i) => { const h = 7 + Math.floor((i+1)/2); const m = (i+1)%2===0?'30':'00'; return { label: m==='00'?`${h}:00`:'', min: h*60+parseInt(m) }; })
                 .filter(x => x.min >= START_MIN && x.min <= END_MIN).map((x, i) => (
-                <div key={i} className="absolute w-full text-[9px] text-slate-400 text-right pr-1" style={{ top: (x.min - START_MIN) * PX_PER_MIN }}>
+                <div key={i} className="absolute w-full text-slate-400 text-right pr-1" style={{ top: (x.min - START_MIN) * PX_PER_MIN, fontSize: baseFontSmall - 1 }}>
                   {x.label && <span className="bg-slate-50 dark:bg-slate-900 px-0.5">{x.label}</span>}
                 </div>
               ))}
             </div>
-
             {days.map((day, di) => {
               const dayStr = format(day, 'yyyy-MM-dd');
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
-
               return (
                 <div key={di} className="border-r border-slate-200 dark:border-slate-700 relative" style={{ height: GRID_H }}
-                  onMouseDown={(e) => {
-                    if (!isAdmin || dragInfo || e.button !== 0) return;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const offsetY = e.clientY - rect.top;
-                    const clickMin = snapTo15(START_MIN + offsetY / PX_PER_MIN);
-                    if (clickMin < START_MIN || clickMin >= END_MIN) return;
-                    setCreateDrag({ dayStr, startY: e.clientY, colTop: rect.top, startMin: clickMin });
-                    setCreatePreview({ top: (clickMin - START_MIN) * PX_PER_MIN, height: 15 * PX_PER_MIN, startTime: minToTime(clickMin), endTime: minToTime(clickMin + 15) });
-                    e.preventDefault();
-                  }}>
-                  {/* Hour lines */}
+                  onMouseDown={(e) => handleGridMouseDown(e, dayStr)}>
                   {Array.from({ length: 11 }, (_, i) => 8 + i).map(h => (
                     <div key={h} className="absolute w-full border-t border-slate-100 dark:border-slate-800/50" style={{ top: (h * 60 - START_MIN) * PX_PER_MIN }} />
                   ))}
-
                   {/* Create preview */}
-                  {createDrag && createDrag.dayStr === dayStr && createPreview && (
+                  {createDrag && createDrag.dayStr === dayStr && createPreview && createDragMoved.current && (
                     <div className="absolute left-0 right-0 mx-0.5 rounded border-2 border-dashed border-blue-500 bg-blue-100/50 dark:bg-blue-900/30 z-40 pointer-events-none flex items-center justify-center"
                       style={{ top: createPreview.top, height: Math.max(createPreview.height, 15 * PX_PER_MIN) }}>
-                      <span className="text-[10px] font-bold text-blue-600">{createPreview.startTime} - {createPreview.endTime}</span>
+                      <span className="font-bold text-blue-600" style={{ fontSize: baseFontBlock }}>{createPreview.startTime} - {createPreview.endTime}</span>
                     </div>
                   )}
-
-                  {/* Sessions */}
                   {daySessions.map((s) => {
                     const isDragging = dragInfo?.sessionId === s.id;
                     const sTop = isDragging && dragPreview ? dragPreview.top : Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
-                    const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
+                    const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18 * zoom, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
                     const overlapping = daySessions.filter(o => o.id !== s.id && timeToMin(o.heure_debut) < timeToMin(s.heure_fin) && timeToMin(o.heure_fin) > timeToMin(s.heure_debut));
                     const total = overlapping.length + 1;
                     const idx = overlapping.filter(o => daySessions.indexOf(o) < daySessions.indexOf(s)).length;
                     return (
                       <div key={s.id} className={`absolute px-0.5 ${isDragging ? 'z-50' : 'z-[15]'}`}
-                        style={{ top: sTop, height: sHeight, width: `${100 / total}%`, left: `${(idx * 100) / total}%` }}
-                        onClick={e => e.stopPropagation()}>
-                        {renderBlock(s, sTop, sHeight)}
+                        style={{ top: sTop, height: sHeight, width: `${100/total}%`, left: `${(idx*100)/total}%` }}>
+                        {renderBlock(s)}
                       </div>
                     );
                   })}
@@ -356,6 +360,10 @@ export default function PlanningGlobal() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Planning global</h1>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setZoom(z => Math.max(0.6, z - 0.1))} data-testid="zoom-out-global"><ZoomOut size={16} /></Button>
+          <span className="text-xs font-medium w-10 text-center">{Math.round(zoom * 100)}%</span>
+          <Button variant="outline" size="sm" onClick={() => setZoom(z => Math.min(2, z + 0.1))} data-testid="zoom-in-global"><ZoomIn size={16} /></Button>
+          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
           <Button variant="outline" size="sm" onClick={prevWeek} data-testid="prev-week"><ChevronLeft size={16} /></Button>
           <span className="text-sm font-semibold px-2"><span className="font-bold text-base">S{weekNum}</span> - {format(days[0], "d MMM", { locale: fr })} au {format(days[4], "d MMM yyyy", { locale: fr })}</span>
           <Button variant="outline" size="sm" onClick={nextWeek} data-testid="next-week"><ChevronRight size={16} /></Button>
@@ -366,18 +374,11 @@ export default function PlanningGlobal() {
         <Button variant={selectedPromos.size === 0 ? "default" : "outline"} size="sm" className="h-8 text-xs"
           onClick={() => setSelectedPromos(new Set())} data-testid="filter-promo-all">Toutes</Button>
         {promotions.map(p => (
-          <Button key={p.id} size="sm" className="h-8 text-xs"
-            variant={selectedPromos.has(p.id) ? "default" : "outline"}
-            onClick={() => {
-              const next = new Set(selectedPromos);
-              if (next.has(p.id)) { next.delete(p.id); } else { next.add(p.id); }
-              setSelectedPromos(next);
-            }}
-            data-testid={`filter-promo-${p.id}`}>
-            {p.nom.replace('Promotion ', '')}
-          </Button>
+          <Button key={p.id} size="sm" className="h-8 text-xs" variant={selectedPromos.has(p.id) ? "default" : "outline"}
+            onClick={() => { const n = new Set(selectedPromos); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); setSelectedPromos(n); }}
+            data-testid={`filter-promo-${p.id}`}>{p.nom.replace('Promotion ', '')}</Button>
         ))}
-        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
         <Select value={filterSemestre} onValueChange={setFilterSemestre}>
           <SelectTrigger className="w-36 h-8 text-xs" data-testid="filter-semestre"><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
@@ -390,26 +391,22 @@ export default function PlanningGlobal() {
         <Button variant={sideByView ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => setSideByView(!sideByView)} data-testid="toggle-side-by-side">
           <Columns size={14} className="mr-1" /> Cote a cote
         </Button>
-        {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={() => startNew(format(new Date(), 'yyyy-MM-dd'))} data-testid="new-session-btn"><Plus size={14} className="mr-1" /> Nouvelle seance</Button>}
+        {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={() => startNew(format(new Date(), 'yyyy-MM-dd'))} data-testid="new-session-btn"><Plus size={14} className="mr-1" /> Nouvelle</Button>}
       </div>
 
-      {/* Grid display */}
       {sideByView && displayPromos.length > 1 ? (
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${displayPromos.length}, 1fr)` }}>
           {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={p.nom} />)}
         </div>
       ) : (
         <div className="space-y-3">
-          {displayPromos.map(p => (
-            <PromoGrid key={p.id} promoId={p.id} promoName={displayPromos.length > 1 ? p.nom : undefined} />
-          ))}
+          {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={displayPromos.length > 1 ? p.nom : undefined} />)}
         </div>
       )}
 
       {renderTooltip()}
       {renderDragOverlay()}
 
-      {/* Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="session-dialog">
           <DialogHeader><DialogTitle>{editSession?.id ? 'Modifier la seance' : 'Nouvelle seance'}</DialogTitle></DialogHeader>

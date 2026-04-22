@@ -157,8 +157,8 @@ export default function PlanningMacro() {
   const handleDragEnd = () => { setDragSession(null); setDragOverWeek(null); };
 
   // Zoom sizes
-  const baseFontUe = 10 * zoom;
-  const baseFontCell = 7 * zoom;
+  const baseFontUe = 11 * zoom;
+  const baseFontCell = 9 * zoom;
   const colLeft = Math.round(140 * zoom);
   const colHours = Math.round(80 * zoom);
   const cellMinH = Math.round(24 * zoom);
