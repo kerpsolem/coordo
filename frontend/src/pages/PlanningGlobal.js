@@ -78,8 +78,9 @@ export default function PlanningGlobal() {
   const displayPromos = selectedPromos.size === 0 ? promotions : promotions.filter(p => selectedPromos.has(p.id));
   const getAbsForDay = (dayStr) => [...new Set(absences.filter(a => a.date === dayStr).map(a => a.formateur_initiales))];
 
-  const startEdit = (s) => { setEditSession({ ...s, formateur_ids: s.formateur_ids || [] }); setShowDialog(true); };
+  const startEdit = (s) => { setHoveredSession(null); setEditSession({ ...s, formateur_ids: s.formateur_ids || [] }); setShowDialog(true); };
   const startNew = (dayStr, hour) => {
+    setHoveredSession(null);
     const hEnd = hour ? `${String(Math.min(parseInt(hour.split(':')[0]) + 2, 18)).padStart(2, '0')}:${hour.split(':')[1]}` : '10:00';
     setEditSession({ date: dayStr, heure_debut: hour || '08:00', heure_fin: hEnd, type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
       group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: '' });
@@ -223,7 +224,7 @@ export default function PlanningGlobal() {
   };
 
   const renderTooltip = () => {
-    if (!hoveredSession || dragInfo) return null;
+    if (!hoveredSession || dragInfo || showDialog) return null;
     const s = hoveredSession, at = atMap[s.type_activite_id] || {}, promo = promoMap[s.promotion_id] || {};
     const ue = ueMap[s.ue_id] || {}, dom = domMap[s.domain_id] || domMap[ue.domain_id] || {};
     const site = siteMap[s.site_id] || {}, grp = grpMap[s.group_id] || {};
