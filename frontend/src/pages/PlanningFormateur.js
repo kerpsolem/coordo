@@ -19,10 +19,12 @@ export default function PlanningFormateur() {
   const [copyAttrs, setCopyAttrs] = useState([]);
   const [ues, setUes] = useState([]);
   const [workload, setWorkload] = useState(null);
+  const [schoolYears, setSchoolYears] = useState([]);
   const [period, setPeriod] = useState('mois');
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [filterSemestre, setFilterSemestre] = useState('all');
+  const [filterAnneeSco, setFilterAnneeSco] = useState('all');
 
   useEffect(() => {
     const today = new Date();
@@ -40,23 +42,31 @@ export default function PlanningFormateur() {
     API.get('/activity-types').then(r => setActTypes(r.data));
     API.get('/promotions').then(r => setPromotions(r.data));
     API.get('/ues').then(r => setUes(r.data));
+    API.get('/school-years').then(r => setSchoolYears(r.data));
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!selectedFormateur || !dateDebut || !dateFin) return;
-    const params = { formateur_id: selectedFormateur, date_debut: dateDebut, date_fin: dateFin };
+    if (!selectedFormateur) return;
+    let dd = dateDebut, df = dateFin;
+    const selectedSY = filterAnneeSco !== 'all' ? schoolYears.find(sy => sy.id === filterAnneeSco) : null;
+    if (selectedSY && selectedSY.date_debut && selectedSY.date_fin) {
+      dd = selectedSY.date_debut;
+      df = selectedSY.date_fin;
+    }
+    if (!dd || !df) return;
+    const params = { formateur_id: selectedFormateur, date_debut: dd, date_fin: df };
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
       const [sessRes, cpRes, wlRes] = await Promise.all([
         API.get('/sessions', { params }),
         API.get('/copy-attributions', { params: { formateur_id: selectedFormateur } }),
-        API.get('/workload', { params: { date_debut: dateDebut, date_fin: dateFin, semestre: filterSemestre !== 'all' ? filterSemestre : undefined } })
+        API.get('/workload', { params: { date_debut: dd, date_fin: df, semestre: filterSemestre !== 'all' ? filterSemestre : undefined } })
       ]);
       setSessions(sessRes.data);
       setCopyAttrs(cpRes.data);
       setWorkload(wlRes.data);
     } catch (e) { console.error(e); }
-  }, [selectedFormateur, dateDebut, dateFin, filterSemestre]);
+  }, [selectedFormateur, dateDebut, dateFin, filterSemestre, filterAnneeSco, schoolYears]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -109,8 +119,16 @@ export default function PlanningFormateur() {
           <SelectTrigger className="w-36"><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous</SelectItem>
-            <SelectItem value="pair">Pairs</SelectItem>
-            <SelectItem value="impair">Impairs</SelectItem>
+            <SelectItem value="pair">Pairs (S2,S4,S6)</SelectItem>
+            <SelectItem value="impair">Impairs (S1,S3,S5)</SelectItem>
+            {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes annees</SelectItem>
+            {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
