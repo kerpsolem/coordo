@@ -1,18 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import API from '../lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { AlertTriangle, Info, AlertCircle, Filter } from 'lucide-react';
-import { format, startOfWeek, endOfWeek, addDays } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { Checkbox } from '../components/ui/checkbox';
+import { AlertTriangle, Info, AlertCircle } from 'lucide-react';
+import { format, startOfWeek, addDays } from 'date-fns';
 
 export default function Alertes() {
   const [alerts, setAlerts] = useState([]);
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
-  const [filterType, setFilterType] = useState('all');
+  const [showError, setShowError] = useState(true);
+  const [showWarning, setShowWarning] = useState(true);
+  const [showInfo, setShowInfo] = useState(true);
 
   useEffect(() => {
     const today = new Date();
@@ -30,7 +32,11 @@ export default function Alertes() {
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
-  const filtered = filterType === 'all' ? alerts : alerts.filter(a => a.type === filterType);
+  const filtered = alerts.filter(a =>
+    (a.type === 'error' && showError) ||
+    (a.type === 'warning' && showWarning) ||
+    (a.type === 'info' && showInfo)
+  );
 
   const iconMap = { error: AlertCircle, warning: AlertTriangle, info: Info };
   const colorMap = {
@@ -39,22 +45,29 @@ export default function Alertes() {
     info: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300'
   };
 
+  const counts = { error: alerts.filter(a => a.type === 'error').length, warning: alerts.filter(a => a.type === 'warning').length, info: alerts.filter(a => a.type === 'info').length };
+
   return (
     <div className="space-y-4" data-testid="alertes">
       <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Alertes</h1>
 
       <div className="flex flex-wrap gap-3 items-end">
-        <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40" /></div>
-        <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40" /></div>
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-36" data-testid="filter-alert-type"><SelectValue placeholder="Type" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes</SelectItem>
-            <SelectItem value="error">Erreurs</SelectItem>
-            <SelectItem value="warning">Avertissements</SelectItem>
-            <SelectItem value="info">Informations</SelectItem>
-          </SelectContent>
-        </Select>
+        <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40 h-8 text-xs" /></div>
+        <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40 h-8 text-xs" /></div>
+        <div className="flex items-center gap-3 ml-2">
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+            <Checkbox checked={showError} onCheckedChange={setShowError} />
+            <span className="flex items-center gap-1"><AlertCircle size={12} className="text-red-500" /> Erreurs ({counts.error})</span>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+            <Checkbox checked={showWarning} onCheckedChange={setShowWarning} />
+            <span className="flex items-center gap-1"><AlertTriangle size={12} className="text-amber-500" /> Avertissements ({counts.warning})</span>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+            <Checkbox checked={showInfo} onCheckedChange={setShowInfo} />
+            <span className="flex items-center gap-1"><Info size={12} className="text-blue-500" /> Informations ({counts.info})</span>
+          </label>
+        </div>
       </div>
 
       <div className="space-y-2">

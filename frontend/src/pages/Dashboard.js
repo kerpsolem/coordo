@@ -2,9 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import API from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Calendar, Clock, Users, AlertTriangle, UserX, Gift, Quote } from 'lucide-react';
+import { Calendar, Clock, Users, AlertTriangle, Gift, Quote, GraduationCap } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer, Legend } from 'recharts';
+
+const PIE_COLORS = ['#6366F1', '#34D399', '#FBBF24', '#F43F5E', '#A78BFA', '#06B6D4', '#F97316', '#94A3B8', '#38BDF8', '#FB923C', '#818CF8'];
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -28,7 +31,6 @@ export default function Dashboard() {
     const today = new Date();
     let dateDebut, dateFin;
 
-    // Si année scolaire sélectionnée, elle est prioritaire sur la période
     const selectedSY = filterAnneeSco !== 'all' ? schoolYears.find(sy => sy.id === filterAnneeSco) : null;
     if (selectedSY && selectedSY.date_debut && selectedSY.date_fin) {
       dateDebut = selectedSY.date_debut;
@@ -66,20 +68,20 @@ export default function Dashboard() {
   const today = new Date();
   const formattedDate = format(today, "EEEE d MMMM yyyy", { locale: fr });
 
+  const pieData = data?.heures_par_type ? Object.entries(data.heures_par_type).map(([name, value]) => ({ name, value: Math.round(value * 10) / 10 })).sort((a, b) => b.value - a.value) : [];
+
   if (loading && !data) return <div className="flex items-center justify-center h-64"><div className="text-slate-500">Chargement...</div></div>;
 
   return (
-    <div className="space-y-6" data-testid="dashboard">
+    <div className="space-y-5" data-testid="dashboard">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight" style={{fontFamily:'Outfit'}}>Tableau de bord</h1>
           <p className="text-base text-slate-500 dark:text-slate-400 mt-1 capitalize">{formattedDate}</p>
         </div>
-        <div className="flex gap-3 items-center">
-          <Select value={period} onValueChange={setPeriod} data-testid="dashboard-period-select">
-            <SelectTrigger className="w-36" data-testid="dashboard-period-trigger">
-              <SelectValue />
-            </SelectTrigger>
+        <div className="flex gap-2 items-center">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-32 h-8 text-xs" data-testid="dashboard-period-trigger"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="jour">Jour</SelectItem>
               <SelectItem value="semaine">Semaine</SelectItem>
@@ -87,21 +89,15 @@ export default function Dashboard() {
             </SelectContent>
           </Select>
           {period === 'semaine' && (
-            <Select value={String(weekNum)} onValueChange={v => setWeekNum(Number(v))} data-testid="dashboard-week-select">
-              <SelectTrigger className="w-24">
-                <SelectValue placeholder={`S${weekNum}`} />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({length: 52}, (_, i) => i + 1).map(w => (
-                  <SelectItem key={w} value={String(w)}>S{w}</SelectItem>
-                ))}
-              </SelectContent>
+            <Select value={String(weekNum)} onValueChange={v => setWeekNum(Number(v))}>
+              <SelectTrigger className="w-20 h-8 text-xs"><SelectValue placeholder={`S${weekNum}`} /></SelectTrigger>
+              <SelectContent>{Array.from({length: 52}, (_, i) => i + 1).map(w => (<SelectItem key={w} value={String(w)}>S{w}</SelectItem>))}</SelectContent>
             </Select>
           )}
         </div>
       </div>
 
-      {/* Filters row */}
+      {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
         <Select value={filterPromo} onValueChange={setFilterPromo}>
           <SelectTrigger className="w-48 h-8 text-xs" data-testid="dashboard-filter-promo"><SelectValue placeholder="Promotion" /></SelectTrigger>
@@ -131,139 +127,91 @@ export default function Dashboard() {
       {/* Saint + Citation */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data?.saint_du_jour && (
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <Gift size={20} className="text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Ephemeride</p>
-                <p className="text-lg font-semibold" style={{fontFamily:'Outfit'}}>Aujourd'hui on fete les <span className="text-amber-600 dark:text-amber-400">{data.saint_du_jour}</span></p>
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="flex items-center gap-4 py-3">
+            <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"><Gift size={20} className="text-amber-600" /></div>
+            <div>
+              <p className="text-xs text-slate-500">Ephemeride</p>
+              <p className="text-base font-semibold" style={{fontFamily:'Outfit'}}>Aujourd'hui on fete les <span className="text-amber-600 dark:text-amber-400">{data.saint_du_jour}</span></p>
+            </div>
+          </CardContent></Card>
         )}
         {data?.citation && (
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                <Quote size={20} className="text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-sm italic text-slate-600 dark:text-slate-300">"{data.citation.text}"</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">-- {data.citation.author}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="flex items-center gap-4 py-3">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center"><Quote size={20} className="text-indigo-600" /></div>
+            <div>
+              <p className="text-sm italic text-slate-600 dark:text-slate-300">"{data.citation.text}"</p>
+              <p className="text-xs text-slate-500 mt-0.5">-- {data.citation.author}</p>
+            </div>
+          </CardContent></Card>
         )}
       </div>
 
-      {/* Anniversaires */}
       {data?.anniversaires?.length > 0 && (
         <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
-          <CardContent className="py-3 flex items-center gap-3">
-            <Gift size={18} className="text-amber-500" />
-            <span className="text-sm font-medium">Anniversaire : {data.anniversaires.join(', ')}</span>
-          </CardContent>
+          <CardContent className="py-2 flex items-center gap-3"><Gift size={16} className="text-amber-500" /><span className="text-sm font-medium">Anniversaire : {data.anniversaires.join(', ')}</span></CardContent>
         </Card>
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card data-testid="kpi-heures">
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <Clock size={20} className="text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{fontFamily:'Outfit'}}>{data?.total_heures?.toFixed(1) || 0}h</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Heures planifiees</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="kpi-seances">
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <Calendar size={20} className="text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{fontFamily:'Outfit'}}>{data?.total_seances || 0}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Seances</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="kpi-formateurs">
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                <Users size={20} className="text-violet-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{fontFamily:'Outfit'}}>{data?.total_formateurs || 0}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Formateurs</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="kpi-alertes">
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
-                <AlertTriangle size={20} className="text-rose-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{fontFamily:'Outfit'}}>{data?.alertes?.length || 0}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Alertes</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card data-testid="kpi-seances"><CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Seances planifiees</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{data?.total_seances || 0}</p><p className="text-[10px] text-slate-400">sur la periode</p></div>
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"><Calendar size={20} className="text-blue-600" /></div>
+          </div>
+        </CardContent></Card>
+        <Card data-testid="kpi-heures"><CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Heures totales</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{data?.total_heures?.toFixed(0) || 0}h</p><p className="text-[10px] text-slate-400">heures cumulees</p></div>
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center"><Clock size={20} className="text-emerald-600" /></div>
+          </div>
+        </CardContent></Card>
+        <Card data-testid="kpi-formateurs"><CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Formateurs actifs</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{data?.total_formateurs || 0}</p><p className="text-[10px] text-slate-400">intervenants</p></div>
+            <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center"><Users size={20} className="text-violet-600" /></div>
+          </div>
+        </CardContent></Card>
+        <Card data-testid="kpi-promos"><CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Promotions</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{promotions.length}</p><p className="text-[10px] text-slate-400">en cours</p></div>
+            <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center"><GraduationCap size={20} className="text-rose-600" /></div>
+          </div>
+        </CardContent></Card>
       </div>
 
-      {/* Heures par promotion */}
+      {/* Charts: Heures par promotion + Repartition par type */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Heures par promotion</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par promotion</CardTitle></CardHeader>
           <CardContent>
             {data?.heures_par_promotion && Object.keys(data.heures_par_promotion).length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {Object.entries(data.heures_par_promotion).map(([promo, h]) => (
                   <div key={promo} className="flex items-center justify-between">
                     <span className="text-sm text-slate-600 dark:text-slate-300 truncate">{promo}</span>
-                    <span className="text-sm font-semibold">{h.toFixed(1)}h</span>
+                    <span className="text-sm font-bold">{h.toFixed(1)}h</span>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-slate-500">Aucune donnee pour cette periode</p>}
+            ) : <p className="text-sm text-slate-500">Aucune donnee</p>}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <UserX size={16}/> Formateurs absents
-            </CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Repartition par type d'activite</CardTitle></CardHeader>
           <CardContent>
-            {data?.formateurs_absents?.length > 0 ? (
-              <div className="space-y-2">
-                {data.formateurs_absents.map((ab, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-slate-50 dark:bg-slate-800/50">
-                    <span className="text-xs font-bold bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">{ab.initiales}</span>
-                    <div>
-                      <p className="text-sm font-medium">{ab.prenom} {ab.nom}</p>
-                      <p className="text-xs text-slate-500">{ab.date_debut} - {ab.date_fin} {ab.recurrence ? '(recurrence)' : ''}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="text-sm text-slate-500">Aucun formateur absent</p>}
+            {pieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={30} dataKey="value" paddingAngle={2}
+                    label={({ name, value }) => `${name}: ${value}h`} labelLine={true}>
+                    {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <ReTooltip formatter={(v) => `${v}h`} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : <p className="text-sm text-slate-500">Aucune donnee</p>}
           </CardContent>
         </Card>
       </div>

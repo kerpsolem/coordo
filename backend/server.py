@@ -750,14 +750,19 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
     sessions = await db.sessions.find(q, {"_id": 0}).to_list(10000)
     promotions = {p["id"]: p for p in await crud_list("promotions")}
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
+    act_types = {a["id"]: a for a in await crud_list("activity_types")}
 
     heures_par_promo = {}
     heures_par_formateur = {}
+    heures_par_type = {}
     for s in sessions:
         pid = s.get("promotion_id", "")
         pname = promotions.get(pid, {}).get("nom", "Inconnu")
         dur = s.get("duree", 0)
         heures_par_promo[pname] = heures_par_promo.get(pname, 0) + dur
+        tid = s.get("type_activite_id", "")
+        tname = act_types.get(tid, {}).get("nom", "Inconnu")
+        heures_par_type[tname] = heures_par_type.get(tname, 0) + dur
         for fid in s.get("formateur_ids", []):
             fname = f"{formateurs.get(fid, {}).get('prenom', '')} {formateurs.get(fid, {}).get('nom', '')}"
             heures_par_formateur[fname] = heures_par_formateur.get(fname, 0) + dur
@@ -817,6 +822,7 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
         "total_formateurs": len(formateurs),
         "heures_par_promotion": heures_par_promo,
         "heures_par_formateur": heures_par_formateur,
+        "heures_par_type": heures_par_type,
         "formateurs_absents": abs_period,
         "alertes": []
     }
