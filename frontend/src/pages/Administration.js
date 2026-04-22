@@ -60,6 +60,9 @@ export default function Administration() {
   const [editItem, setEditItem] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogType, setDialogType] = useState('');
+  const [acceptRequest, setAcceptRequest] = useState(null);
+  const [acceptRole, setAcceptRole] = useState('formateur');
+  const [acceptPassword, setAcceptPassword] = useState('');
 
   const loadAll = async () => {
     try {
@@ -103,6 +106,23 @@ export default function Administration() {
     const endpoints = { formateurs: '/formateurs', promotions: '/promotions', groups: '/groups', sites: '/sites',
       actTypes: '/activity-types', domains: '/domains', ues: '/ues', schoolYears: '/school-years', users: '/users' };
     try { await API.delete(`${endpoints[type]}/${id}`); loadAll(); } catch (e) { console.error(e); }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!acceptRequest || !acceptPassword) return;
+    try {
+      // Create user account from the request
+      await API.post('/users', {
+        nom: acceptRequest.nom, prenom: acceptRequest.prenom,
+        email: acceptRequest.email, role: acceptRole, password: acceptPassword
+      });
+      // Mark request as accepted
+      await API.patch(`/access-requests/${acceptRequest.id}`, { status: 'acceptee' });
+      setAcceptRequest(null); setAcceptPassword(''); setAcceptRole('formateur');
+      loadAll();
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erreur lors de la creation du compte');
+    }
   };
 
   const seedData = async () => {
@@ -273,8 +293,8 @@ export default function Administration() {
                           <div className="flex gap-1">
                             {r.status === 'en_attente' && (
                               <>
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" title="Accepter"
-                                  onClick={async () => { await API.patch(`/access-requests/${r.id}`, { status: 'acceptee' }); loadAll(); }}><Check size={14} /></Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" title="Accepter et creer le compte"
+                                  onClick={() => { setAcceptRequest(r); setAcceptRole('formateur'); setAcceptPassword(''); }}><Check size={14} /></Button>
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" title="Refuser"
                                   onClick={async () => { await API.patch(`/access-requests/${r.id}`, { status: 'refusee' }); loadAll(); }}><X size={14} /></Button>
                               </>
@@ -308,6 +328,45 @@ export default function Administration() {
             <Button variant="outline" onClick={() => setShowDialog(false)}>Annuler</Button>
             <Button onClick={save} data-testid="save-admin-item">Enregistrer</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Accept Request Dialog */}
+      <Dialog open={!!acceptRequest} onOpenChange={(open) => { if (!open) setAcceptRequest(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Creer le compte utilisateur</DialogTitle></DialogHeader>
+          {acceptRequest && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-slate-500">Nom</span><span className="font-medium">{acceptRequest.prenom} {acceptRequest.nom}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Email</span><span className="font-medium">{acceptRequest.email}</span></div>
+                {acceptRequest.message && <div className="flex justify-between"><span className="text-slate-500">Message</span><span className="text-xs">{acceptRequest.message}</span></div>}
+              </div>
+              <div>
+                <Label className="text-xs">Role a attribuer</Label>
+                <Select value={acceptRole} onValueChange={setAcceptRole}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="formateur">Formateur</SelectItem>
+                    <SelectItem value="secretariat">Secretariat</SelectItem>
+                    <SelectItem value="admin_coordination">Admin Coordination</SelectItem>
+                    <SelectItem value="lecture_seule">Lecture seule</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Mot de passe</Label>
+                <Input type="text" className="h-8 text-sm" value={acceptPassword} onChange={e => setAcceptPassword(e.target.value)}
+                  placeholder="Definir un mot de passe" data-testid="accept-password" />
+                <p className="text-[10px] text-slate-500 mt-1">Ce mot de passe sera utilise pour la premiere connexion</p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" size="sm" onClick={() => setAcceptRequest(null)}>Annuler</Button>
+                <Button size="sm" onClick={handleAcceptRequest} disabled={!acceptPassword} data-testid="confirm-accept">
+                  <Check size={14} className="mr-1" /> Creer le compte
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
