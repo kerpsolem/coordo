@@ -68,14 +68,18 @@ export default function AttributionCopies() {
   const byFormateur = {};
   attributions.forEach(a => {
     const key = a.formateur_id;
-    if (!byFormateur[key]) byFormateur[key] = { items: [], totalCopies: 0, totalHeures: 0 };
+    const minParCopie = a.minutes_par_copie || a.volume_horaire || 0;
+    const copies = a.nombre_copies || 0;
+    const totalMin = minParCopie * copies;
+    if (!byFormateur[key]) byFormateur[key] = { items: [], totalCopies: 0, totalMinutes: 0 };
     byFormateur[key].items.push(a);
-    byFormateur[key].totalCopies += a.nombre_copies || 0;
-    byFormateur[key].totalHeures += a.volume_horaire || 0;
+    byFormateur[key].totalCopies += copies;
+    byFormateur[key].totalMinutes += totalMin;
   });
 
   const totalCopies = attributions.reduce((s, a) => s + (a.nombre_copies || 0), 0);
-  const totalHeures = attributions.reduce((s, a) => s + (a.volume_horaire || 0), 0);
+  const totalMinutes = attributions.reduce((s, a) => s + (a.minutes_par_copie || a.volume_horaire || 0) * (a.nombre_copies || 0), 0);
+  const fmtTime = (min) => { const h = Math.floor(min / 60); const m = Math.round(min % 60); return h > 0 ? `${h}h${m > 0 ? String(m).padStart(2, '0') : ''}` : `${m}min`; };
 
   // Sort formateurs by name, only those with attributions or all
   const sortedFormateurs = formateurs
@@ -117,7 +121,7 @@ export default function AttributionCopies() {
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="py-3"><p className="text-xl font-bold" style={{ fontFamily: 'Outfit' }}>{totalCopies}</p><p className="text-xs text-slate-500">Total copies</p></CardContent></Card>
-        <Card><CardContent className="py-3"><p className="text-xl font-bold" style={{ fontFamily: 'Outfit' }}>{totalHeures.toFixed(1)}h</p><p className="text-xs text-slate-500">Volume horaire</p></CardContent></Card>
+        <Card><CardContent className="py-3"><p className="text-xl font-bold" style={{ fontFamily: 'Outfit' }}>{fmtTime(totalMinutes)}</p><p className="text-xs text-slate-500">Volume horaire total</p></CardContent></Card>
         <Card><CardContent className="py-3"><p className="text-xl font-bold" style={{ fontFamily: 'Outfit' }}>{sortedFormateurs.length}</p><p className="text-xs text-slate-500">Formateurs concernes</p></CardContent></Card>
       </div>
 
@@ -142,7 +146,7 @@ export default function AttributionCopies() {
                 <div className="flex items-center gap-4 text-xs text-slate-500">
                   <span>{data.items.length} attribution{data.items.length > 1 ? 's' : ''}</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-300">{data.totalCopies} copies</span>
-                  <span>{data.totalHeures.toFixed(1)}h</span>
+                  <span>{fmtTime(data.totalMinutes)}</span>
                   {isAdmin && (
                     <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
                       onClick={(e) => { e.stopPropagation(); startNew(f.id); }}>
@@ -163,7 +167,8 @@ export default function AttributionCopies() {
                         <TableHead className="text-[10px] py-1.5">UE</TableHead>
                         <TableHead className="text-[10px] py-1.5">Type</TableHead>
                         <TableHead className="text-[10px] py-1.5 text-right">Copies</TableHead>
-                        <TableHead className="text-[10px] py-1.5 text-right">Heures</TableHead>
+                        <TableHead className="text-[10px] py-1.5 text-right">Min/copie</TableHead>
+                        <TableHead className="text-[10px] py-1.5 text-right">Total</TableHead>
                         {isAdmin && <TableHead className="text-[10px] py-1.5 w-20">Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -175,7 +180,8 @@ export default function AttributionCopies() {
                           <TableCell className="py-1">{ueMap[a.ue_id]?.code_ue} - {ueMap[a.ue_id]?.intitule}</TableCell>
                           <TableCell className="py-1">{a.type_evaluation}</TableCell>
                           <TableCell className="py-1 text-right font-semibold">{a.nombre_copies}</TableCell>
-                          <TableCell className="py-1 text-right">{a.volume_horaire}h</TableCell>
+                          <TableCell className="py-1 text-right">{a.minutes_par_copie || a.volume_horaire || 0} min</TableCell>
+                          <TableCell className="py-1 text-right font-medium">{fmtTime((a.minutes_par_copie || a.volume_horaire || 0) * (a.nombre_copies || 0))}</TableCell>
                           {isAdmin && (
                             <TableCell className="py-1">
                               <div className="flex gap-0.5">
@@ -244,7 +250,13 @@ export default function AttributionCopies() {
                 </Select>
               </div>
               <div><Label className="text-xs">Nombre de copies</Label><Input type="number" className="h-8 text-sm" value={editItem.nombre_copies || 0} onChange={e => setEditItem({ ...editItem, nombre_copies: Number(e.target.value) })} /></div>
-              <div><Label className="text-xs">Volume horaire</Label><Input type="number" step="0.5" className="h-8 text-sm" value={editItem.volume_horaire || 0} onChange={e => setEditItem({ ...editItem, volume_horaire: Number(e.target.value) })} /></div>
+              <div>
+                <Label className="text-xs">Minutes par copie</Label>
+                <Input type="number" step="1" className="h-8 text-sm" value={editItem.minutes_par_copie || editItem.volume_horaire || 0} onChange={e => setEditItem({ ...editItem, minutes_par_copie: Number(e.target.value) })} />
+                {editItem.nombre_copies > 0 && (editItem.minutes_par_copie || editItem.volume_horaire || 0) > 0 && (
+                  <p className="text-[10px] text-slate-500 mt-0.5">= {fmtTime((editItem.minutes_par_copie || editItem.volume_horaire || 0) * editItem.nombre_copies)} pour {editItem.nombre_copies} copies</p>
+                )}
+              </div>
               <div><Label className="text-xs">Commentaire</Label><Input className="h-8 text-sm" value={editItem.commentaire || ''} onChange={e => setEditItem({ ...editItem, commentaire: e.target.value })} /></div>
               <div className="col-span-2 flex justify-end gap-2 pt-2">
                 <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Annuler</Button>
