@@ -27,7 +27,7 @@ const coordinationLinks = [
 ];
 
 export default function Layout({ children }) {
-  const { user, logout, isAdmin, isSuperAdmin } = useAuth();
+  const { user, logout, isAdmin, isSuperAdmin, isSecretariat } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -45,6 +45,7 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
+  const showCoordination = isAdmin || isSecretariat;
   const isCoordPage = coordinationLinks.some(l => location.pathname === l.to);
 
   const NavLink = ({ to, label, icon: Icon }) => {
@@ -92,8 +93,8 @@ export default function Layout({ children }) {
             </div>
           )}
 
-          {/* Coordination - visible only for admins */}
-          {isAdmin && (
+          {/* Coordination - visible for admins and secretariat */}
+          {showCoordination && (
             <>
               <div className="my-3 border-t border-slate-200 dark:border-slate-700" />
               <button
@@ -108,6 +109,8 @@ export default function Layout({ children }) {
               {coordOpen && (
                 <div className="space-y-0.5 ml-1">
                   {coordinationLinks.map(l => {
+                    // Secretariat only sees Coordination planning
+                    if (isSecretariat && !isAdmin && l.to !== '/coordination-planning') return null;
                     if (l.to === '/administration' && !isSuperAdmin && user?.role !== 'admin_coordination') return null;
                     return <NavLink key={l.to} {...l} />;
                   })}
@@ -147,7 +150,7 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        {isCoordPage && isAdmin && (
+        {isCoordPage && showCoordination && (
           <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-6 py-1.5">
             <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 tracking-wider uppercase">Mode edition</span>
           </div>

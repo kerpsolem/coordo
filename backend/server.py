@@ -61,6 +61,12 @@ async def require_admin(request: Request):
         raise HTTPException(403, "Acces non autorise")
     return u
 
+async def require_admin_or_secretariat(request: Request):
+    u = await get_user(request)
+    if u.get("role") not in ["super_admin", "admin_coordination", "secretariat"]:
+        raise HTTPException(403, "Acces non autorise")
+    return u
+
 # ===================== AUTH ROUTES =====================
 @api_router.post("/auth/login")
 async def login(request: Request, response: Response):
@@ -364,12 +370,18 @@ async def duplicate_session(id: str, request: Request):
 
 @api_router.patch("/sessions/{id}/toggle")
 async def toggle_session_field(id: str, request: Request):
-    await require_admin(request)
+    u = await get_user(request)
     b = await request.json()
     field = b.get("field")
     value = b.get("value")
     if field not in ["saisi", "statut"]:
         raise HTTPException(400, "Champ non autorise")
+    # Secretariat can only toggle 'saisi'
+    if u.get("role") == "secretariat":
+        if field != "saisi":
+            raise HTTPException(403, "Le secretariat ne peut modifier que la saisie")
+    elif u.get("role") not in ["super_admin", "admin_coordination"]:
+        raise HTTPException(403, "Acces non autorise")
     return await crud_update("sessions", id, {field: value})
 
 # ===================== ABSENCES =====================

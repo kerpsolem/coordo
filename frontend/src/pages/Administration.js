@@ -152,6 +152,7 @@ export default function Administration() {
       ['nom', 'Nom'], ['prenom', 'Prenom'], ['email', 'Email', 'email'],
       ['role', 'Role', 'select', [
         { value: 'super_admin', label: 'Super Admin' }, { value: 'admin_coordination', label: 'Admin Coordination' },
+        { value: 'secretariat', label: 'Secretariat' },
         { value: 'formateur', label: 'Formateur' }, { value: 'lecture_seule', label: 'Lecture seule' }
       ]],
       ['password', 'Mot de passe', 'password']

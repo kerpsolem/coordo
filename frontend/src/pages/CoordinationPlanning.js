@@ -12,7 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Plus, Edit2, Trash2, Copy, Check, X, Search, Filter } from 'lucide-react';
 
 export default function CoordinationPlanning() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isSecretariat } = useAuth();
+  const canEdit = isAdmin;
+  const canToggleSaisi = isAdmin || isSecretariat;
   const [sessions, setSessions] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [formateurs, setFormateurs] = useState([]);
@@ -112,7 +114,7 @@ export default function CoordinationPlanning() {
     <div className="space-y-4" data-testid="coordination-planning">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Coordination planning</h1>
-        {isAdmin && <Button onClick={startNew} data-testid="new-session-btn"><Plus size={16} className="mr-2" />Nouvelle seance</Button>}
+        {canEdit && <Button onClick={startNew} data-testid="new-session-btn"><Plus size={16} className="mr-2" />Nouvelle seance</Button>}
       </div>
 
       {/* Filters */}
@@ -169,7 +171,7 @@ export default function CoordinationPlanning() {
                 <TableHead className="text-xs">Sem.</TableHead>
                 <TableHead className="text-xs">Statut</TableHead>
                 <TableHead className="text-xs">Saisi</TableHead>
-                {isAdmin && <TableHead className="text-xs">Actions</TableHead>}
+                {(canEdit || canToggleSaisi) && <TableHead className="text-xs">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -190,27 +192,27 @@ export default function CoordinationPlanning() {
                   </TableCell>
                   <TableCell className="py-2">{s.semestre}</TableCell>
                   <TableCell className="py-2">
-                    <button onClick={() => isAdmin && toggleField(s.id, 'statut', s.statut)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer
+                    <button onClick={() => canEdit && toggleField(s.id, 'statut', s.statut)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${canEdit ? 'cursor-pointer' : 'cursor-default'}
                         ${s.statut === 'Valide' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}
                       data-testid={`toggle-statut-${s.id}`}>
                       {s.statut}
                     </button>
                   </TableCell>
                   <TableCell className="py-2">
-                    <button onClick={() => isAdmin && toggleField(s.id, 'saisi', s.saisi)}
-                      className={`w-5 h-5 rounded flex items-center justify-center cursor-pointer
+                    <button onClick={() => canToggleSaisi && toggleField(s.id, 'saisi', !s.saisi)}
+                      className={`w-5 h-5 rounded flex items-center justify-center ${canToggleSaisi ? 'cursor-pointer' : 'cursor-default'}
                         ${s.saisi ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-slate-100 dark:bg-slate-800'}`}
                       data-testid={`toggle-saisi-${s.id}`}>
                       {s.saisi && <Check size={12} className="text-blue-600" />}
                     </button>
                   </TableCell>
-                  {isAdmin && (
+                  {(canEdit || canToggleSaisi) && (
                     <TableCell className="py-2">
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => startEdit(s)}><Edit2 size={12} /></Button>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => duplicateSession(s.id)}><Copy size={12} /></Button>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteSession(s.id)}><Trash2 size={12} /></Button>
+                        {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => startEdit(s)}><Edit2 size={12} /></Button>}
+                        {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => duplicateSession(s.id)}><Copy size={12} /></Button>}
+                        {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteSession(s.id)}><Trash2 size={12} /></Button>}
                       </div>
                     </TableCell>
                   )}
