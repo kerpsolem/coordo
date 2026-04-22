@@ -91,11 +91,11 @@ def clean_doc(doc):
         return None
     return {k: v for k, v in doc.items() if k != "_id"}
 
-async def crud_list(coll, query=None, sort=None):
+async def crud_list(coll, query=None, sort=None, limit=2000):
     cursor = db[coll].find(query or {}, {"_id": 0})
     if sort:
         cursor = cursor.sort(sort)
-    return await cursor.to_list(10000)
+    return await cursor.to_list(limit)
 
 async def crud_get(coll, id):
     doc = await db[coll].find_one({"id": id}, {"_id": 0})
@@ -411,7 +411,12 @@ async def delete_absence(id: str, request: Request):
 
 @api_router.get("/absences/for-period")
 async def absences_for_period(date_debut: str, date_fin: str):
-    absences = await crud_list("absences")
+    abs_query = {"$or": [
+        {"date_fin": {"$gte": date_debut}},
+        {"date_fin_recurrence": {"$gte": date_debut}},
+        {"recurrence": True}
+    ]}
+    absences = await db.absences.find(abs_query, {"_id": 0}).to_list(1000)
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
     result = []
     d_start = date.fromisoformat(date_debut)
@@ -747,7 +752,7 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
     if annee_scolaire_id:
         q["annee_scolaire_id"] = annee_scolaire_id
 
-    sessions = await db.sessions.find(q, {"_id": 0}).to_list(10000)
+    sessions = await db.sessions.find(q, {"_id": 0}).to_list(2000)
     promotions = {p["id"]: p for p in await crud_list("promotions")}
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
@@ -767,7 +772,12 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
             fname = f"{formateurs.get(fid, {}).get('prenom', '')} {formateurs.get(fid, {}).get('nom', '')}"
             heures_par_formateur[fname] = heures_par_formateur.get(fname, 0) + dur
 
-    absences = await db.absences.find({}, {"_id": 0}).to_list(10000)
+    abs_query = {"$or": [
+        {"date_fin": {"$gte": date_debut}},
+        {"date_fin_recurrence": {"$gte": date_debut}},
+        {"recurrence": True}
+    ]}
+    absences = await db.absences.find(abs_query, {"_id": 0}).to_list(1000)
     abs_period = []
     d_start = date.fromisoformat(date_debut)
     d_end = date.fromisoformat(date_fin)
@@ -854,7 +864,7 @@ async def recap_hours(date_debut: Optional[str] = None, date_fin: Optional[str] 
     if domain_id:
         q["domain_id"] = domain_id
 
-    sessions = await db.sessions.find(q, {"_id": 0}).to_list(10000)
+    sessions = await db.sessions.find(q, {"_id": 0}).to_list(2000)
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
     promotions = {p["id"]: p for p in await crud_list("promotions")}
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
@@ -927,7 +937,7 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
         pids = promotion_ids.split(",")
         q["promotion_id"] = {"$in": pids}
 
-    sessions = await db.sessions.find(q, {"_id": 0}).to_list(10000)
+    sessions = await db.sessions.find(q, {"_id": 0}).to_list(2000)
     formateurs = await crud_list("formateurs")
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
 
@@ -989,7 +999,7 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
     if not date_fin:
         date_fin = (today + timedelta(days=30)).isoformat()
 
-    sessions = await db.sessions.find({"date": {"$gte": date_debut, "$lte": date_fin}}, {"_id": 0}).to_list(10000)
+    sessions = await db.sessions.find({"date": {"$gte": date_debut, "$lte": date_fin}}, {"_id": 0}).to_list(2000)
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
     promotions = {p["id"]: p for p in await crud_list("promotions")}
 
