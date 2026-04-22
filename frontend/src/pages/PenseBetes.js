@@ -16,6 +16,7 @@ export default function PenseBetes() {
   const [showDialog, setShowDialog] = useState(false);
   const [dragging, setDragging] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [filterStatut, setFilterStatut] = useState('all');
   const boardRef = useRef(null);
 
   const load = async () => {
@@ -78,16 +79,30 @@ export default function PenseBetes() {
     setDragging(null);
   };
 
+  const fmtDt = (iso) => {
+    if (!iso) return '';
+    const d = iso.split('T')[0];
+    const t = iso.split('T')[1];
+    return t ? `${d} a ${t.slice(0, 5)}` : d;
+  };
+
+  const filteredNotes = filterStatut === 'all' ? notes : notes.filter(n => n.statut === filterStatut);
+
   return (
     <div className="space-y-4" data-testid="pense-betes">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Pense-betes</h1>
-        {isAdmin && <Button onClick={startNew} data-testid="new-note"><Plus size={14} className="mr-1" />Nouveau pense-bete</Button>}
+        <div className="flex gap-2 items-center">
+          <Button variant={filterStatut === 'all' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setFilterStatut('all')} data-testid="filter-all">Tous</Button>
+          <Button variant={filterStatut === 'non_resolu' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setFilterStatut('non_resolu')} data-testid="filter-non-resolu">Non resolus</Button>
+          <Button variant={filterStatut === 'resolu' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setFilterStatut('resolu')} data-testid="filter-resolu">Resolus</Button>
+          {isAdmin && <Button onClick={startNew} data-testid="new-note"><Plus size={14} className="mr-1" />Nouveau</Button>}
+        </div>
       </div>
 
       <div ref={boardRef} className="relative bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg min-h-[600px] overflow-hidden"
         onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-        {notes.map(note => (
+        {filteredNotes.map(note => (
           <div
             key={note.id}
             data-testid={`note-${note.id}`}
@@ -109,8 +124,8 @@ export default function PenseBetes() {
             </div>
             <p className="text-xs text-slate-700 whitespace-pre-wrap mb-2 line-clamp-4">{note.contenu}</p>
             <div className="text-[9px] text-slate-500 space-y-0.5">
-              <div>Cree par {note.auteur} le {note.created_at?.split('T')[0]}</div>
-              {note.modified_by && <div>Modifie par {note.modified_by} le {note.modified_at?.split('T')[0]}</div>}
+              <div>Cree par {note.auteur} le {fmtDt(note.created_at)}</div>
+              {note.modified_by && <div>Modifie par {note.modified_by} le {fmtDt(note.modified_at)}</div>}
             </div>
             {isAdmin && (
               <div className="flex gap-1 mt-2 pt-1 border-t border-slate-300/50">
@@ -120,8 +135,10 @@ export default function PenseBetes() {
             )}
           </div>
         ))}
-        {notes.length === 0 && (
-          <div className="flex items-center justify-center h-64 text-slate-500 text-sm">Aucun pense-bete. Cliquez sur "Nouveau" pour en creer un.</div>
+        {filteredNotes.length === 0 && (
+          <div className="flex items-center justify-center h-64 text-slate-500 text-sm">
+            {filterStatut === 'all' ? 'Aucun pense-bete. Cliquez sur "Nouveau" pour en creer un.' : `Aucun pense-bete ${filterStatut === 'resolu' ? 'resolu' : 'non resolu'}.`}
+          </div>
         )}
       </div>
 
