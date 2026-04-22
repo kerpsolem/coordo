@@ -18,11 +18,13 @@ export default function RecapHeures() {
   const [filterPromo, setFilterPromo] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
+  const [filterAnneeSco, setFilterAnneeSco] = useState('all');
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [formateurs, setFormateurs] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [actTypes, setActTypes] = useState([]);
+  const [schoolYears, setSchoolYears] = useState([]);
   const [view, setView] = useState('formateur');
 
   useEffect(() => {
@@ -37,26 +39,33 @@ export default function RecapHeures() {
   }, [period]);
 
   const fetchData = useCallback(async () => {
-    const params = {};
-    if (dateDebut) params.date_debut = dateDebut;
-    if (dateFin) params.date_fin = dateFin;
+    let dd = dateDebut, df = dateFin;
+    const selectedSY = filterAnneeSco !== 'all' ? schoolYears.find(sy => sy.id === filterAnneeSco) : null;
+    if (selectedSY && selectedSY.date_debut && selectedSY.date_fin) {
+      dd = selectedSY.date_debut;
+      df = selectedSY.date_fin;
+    }
+    if (!dd || !df) return;
+
+    const params = { date_debut: dd, date_fin: df };
     if (filterFormateur !== 'all') params.formateur_id = filterFormateur;
     if (filterPromo !== 'all') params.promotion_id = filterPromo;
     if (filterType !== 'all') params.type_activite_id = filterType;
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
 
     try {
-      const [recRes, fmRes, prRes, atRes] = await Promise.all([
-        API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types')
+      const [recRes, fmRes, prRes, atRes, syRes] = await Promise.all([
+        API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types'), API.get('/school-years')
       ]);
       setData(recRes.data);
       setFormateurs(fmRes.data);
       setPromotions(prRes.data);
       setActTypes(atRes.data);
+      setSchoolYears(syRes.data);
     } catch (e) { console.error(e); }
-  }, [dateDebut, dateFin, filterFormateur, filterPromo, filterType, filterSemestre]);
+  }, [dateDebut, dateFin, filterFormateur, filterPromo, filterType, filterSemestre, filterAnneeSco, schoolYears]);
 
-  useEffect(() => { if (dateDebut && dateFin) fetchData(); }, [fetchData, dateDebut, dateFin]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
     <div className="space-y-4" data-testid="recap-heures">
@@ -100,6 +109,13 @@ export default function RecapHeures() {
             <SelectItem value="pair">Pairs</SelectItem>
             <SelectItem value="impair">Impairs</SelectItem>
             {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes annees</SelectItem>
+            {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterType} onValueChange={setFilterType}>
