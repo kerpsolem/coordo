@@ -109,15 +109,12 @@ export default function Administration() {
   };
 
   const handleAcceptRequest = async () => {
-    if (!acceptRequest || !acceptPassword) return;
+    if (!acceptRequest) return;
     try {
-      // Create user account from the request
-      await API.post('/users', {
-        nom: acceptRequest.nom, prenom: acceptRequest.prenom,
-        email: acceptRequest.email, role: acceptRole, password: acceptPassword
+      await API.patch(`/access-requests/${acceptRequest.id}`, {
+        status: 'acceptee', create_account: true, role: acceptRole,
+        password: acceptPassword || undefined
       });
-      // Mark request as accepted
-      await API.patch(`/access-requests/${acceptRequest.id}`, { status: 'acceptee' });
       setAcceptRequest(null); setAcceptPassword(''); setAcceptRole('formateur');
       loadAll();
     } catch (e) {
@@ -354,14 +351,14 @@ export default function Administration() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Mot de passe</Label>
+                <Label className="text-xs">Mot de passe (optionnel)</Label>
                 <Input type="text" className="h-8 text-sm" value={acceptPassword} onChange={e => setAcceptPassword(e.target.value)}
-                  placeholder="Definir un mot de passe" data-testid="accept-password" />
-                <p className="text-[10px] text-slate-500 mt-1">Ce mot de passe sera utilise pour la premiere connexion</p>
+                  placeholder="Laisser vide = mot de passe choisi par l'utilisateur" data-testid="accept-password" />
+                <p className="text-[10px] text-slate-500 mt-1">L'utilisateur a deja choisi son mot de passe. Remplir ici uniquement pour le remplacer.</p>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" size="sm" onClick={() => setAcceptRequest(null)}>Annuler</Button>
-                <Button size="sm" onClick={handleAcceptRequest} disabled={!acceptPassword} data-testid="confirm-accept">
+                <Button size="sm" onClick={handleAcceptRequest} data-testid="confirm-accept">
                   <Check size={14} className="mr-1" /> Creer le compte
                 </Button>
               </div>

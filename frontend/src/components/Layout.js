@@ -2,10 +2,14 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import API from '../lib/api';
 import {
   LayoutDashboard, Calendar, Map, Users, UserCheck, ClipboardList,
   Clock, Settings, AlertTriangle, UserX, StickyNote, LogOut,
-  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X
+  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key
 } from 'lucide-react';
 
 const consultationLinks = [
@@ -34,6 +38,21 @@ export default function Layout({ children }) {
   const [coordOpen, setCoordOpen] = useState(true);
   const [consultOpen, setConsultOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showPwDialog, setShowPwDialog] = useState(false);
+  const [pwForm, setPwForm] = useState({ old_password: '', new_password: '', confirm: '' });
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState(false);
+
+  const handleChangePw = async () => {
+    setPwError('');
+    if (pwForm.new_password.length < 6) { setPwError('Min. 6 caracteres'); return; }
+    if (pwForm.new_password !== pwForm.confirm) { setPwError('Les mots de passe ne correspondent pas'); return; }
+    try {
+      await API.post('/auth/change-password', { old_password: pwForm.old_password, new_password: pwForm.new_password });
+      setPwSuccess(true);
+      setTimeout(() => { setShowPwDialog(false); setPwSuccess(false); setPwForm({ old_password: '', new_password: '', confirm: '' }); }, 1500);
+    } catch (e) { setPwError(e.response?.data?.detail || 'Erreur'); }
+  };
 
   const toggleDark = () => {
     document.documentElement.classList.toggle('dark');
@@ -141,6 +160,9 @@ export default function Layout({ children }) {
               {dark ? <Sun size={16}/> : <Moon size={16}/>}
               <span className="ml-2 text-xs">{dark ? 'Clair' : 'Sombre'}</span>
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowPwDialog(true)} data-testid="change-pw-btn" title="Changer le mot de passe">
+              <Key size={16}/>
+            </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="logout-btn" className="text-red-500 hover:text-red-600">
               <LogOut size={16}/>
             </Button>
@@ -164,6 +186,24 @@ export default function Layout({ children }) {
           {children}
         </div>
       </main>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showPwDialog} onOpenChange={(o) => { if (!o) { setShowPwDialog(false); setPwError(''); setPwSuccess(false); setPwForm({ old_password: '', new_password: '', confirm: '' }); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Changer le mot de passe</DialogTitle></DialogHeader>
+          {pwSuccess ? (
+            <p className="text-sm text-green-600 font-medium text-center py-4">Mot de passe modifie avec succes</p>
+          ) : (
+            <div className="space-y-3">
+              {pwError && <div className="p-2 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-xs text-red-600">{pwError}</div>}
+              <div><Label className="text-xs">Ancien mot de passe</Label><Input type="password" className="h-8 text-sm" value={pwForm.old_password} onChange={e => setPwForm({ ...pwForm, old_password: e.target.value })} data-testid="old-pw" /></div>
+              <div><Label className="text-xs">Nouveau mot de passe</Label><Input type="password" className="h-8 text-sm" value={pwForm.new_password} onChange={e => setPwForm({ ...pwForm, new_password: e.target.value })} data-testid="new-pw" /></div>
+              <div><Label className="text-xs">Confirmer</Label><Input type="password" className="h-8 text-sm" value={pwForm.confirm} onChange={e => setPwForm({ ...pwForm, confirm: e.target.value })} data-testid="confirm-pw" /></div>
+              <Button className="w-full" size="sm" onClick={handleChangePw} data-testid="save-pw">Modifier</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

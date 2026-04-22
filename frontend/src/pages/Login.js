@@ -14,7 +14,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
-  const [reqForm, setReqForm] = useState({ nom: '', prenom: '', email: '', message: '' });
+  const [reqForm, setReqForm] = useState({ nom: '', prenom: '', email: '', message: '', password: '', password_confirm: '' });
   const [reqSent, setReqSent] = useState(false);
   const [reqError, setReqError] = useState('');
   const { login } = useAuth();
@@ -39,8 +39,16 @@ export default function Login() {
   const handleRequestAccess = async (e) => {
     e.preventDefault();
     setReqError('');
-    if (!reqForm.nom || !reqForm.prenom || !reqForm.email) {
+    if (!reqForm.nom || !reqForm.prenom || !reqForm.email || !reqForm.password) {
       setReqError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+    if (reqForm.password.length < 6) {
+      setReqError('Le mot de passe doit contenir au moins 6 caracteres');
+      return;
+    }
+    if (reqForm.password !== reqForm.password_confirm) {
+      setReqError('Les mots de passe ne correspondent pas');
       return;
     }
     try {
@@ -103,7 +111,7 @@ export default function Login() {
               </div>
               <p className="text-sm font-medium">Demande envoyee</p>
               <p className="text-xs text-slate-500">Votre demande d'acces a ete transmise a l'administrateur. Vous recevrez une reponse par email.</p>
-              <Button variant="outline" size="sm" onClick={() => { setShowRequest(false); setReqSent(false); setReqForm({ nom: '', prenom: '', email: '', message: '' }); }}>
+              <Button variant="outline" size="sm" onClick={() => { setShowRequest(false); setReqSent(false); setReqForm({ nom: '', prenom: '', email: '', message: '', password: '', password_confirm: '' }); }}>
                 <ArrowLeft size={14} className="mr-1" /> Retour a la connexion
               </Button>
             </div>
@@ -123,6 +131,10 @@ export default function Login() {
                 <div><Label className="text-xs">Prenom *</Label><Input value={reqForm.prenom} onChange={e => setReqForm({ ...reqForm, prenom: e.target.value })} placeholder="Marie" className="h-8 text-sm" data-testid="req-prenom" /></div>
               </div>
               <div><Label className="text-xs">Email *</Label><Input type="email" value={reqForm.email} onChange={e => setReqForm({ ...reqForm, email: e.target.value })} placeholder="votre@email.fr" className="h-8 text-sm" data-testid="req-email" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Mot de passe *</Label><Input type="password" value={reqForm.password} onChange={e => setReqForm({ ...reqForm, password: e.target.value })} placeholder="Min. 6 caracteres" className="h-8 text-sm" data-testid="req-password" /></div>
+                <div><Label className="text-xs">Confirmer *</Label><Input type="password" value={reqForm.password_confirm} onChange={e => setReqForm({ ...reqForm, password_confirm: e.target.value })} placeholder="Confirmer" className="h-8 text-sm" data-testid="req-password-confirm" /></div>
+              </div>
               <div><Label className="text-xs">Message (optionnel)</Label>
                 <textarea className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" rows={2} placeholder="Motif de la demande..."
                   value={reqForm.message} onChange={e => setReqForm({ ...reqForm, message: e.target.value })} data-testid="req-message" />

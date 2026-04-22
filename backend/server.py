@@ -574,15 +574,35 @@ async def delete_school_year(id: str, request: Request):
     return await crud_delete("school_years", id)
 
 
+
+# ===================== CHANGE PASSWORD =====================
+@api_router.post("/auth/change-password")
+async def change_password(request: Request):
+    u = await get_user(request)
+    b = await request.json()
+    old_pw = b.get("old_password", "")
+    new_pw = b.get("new_password", "")
+    if len(new_pw) < 6:
+        raise HTTPException(400, "Le mot de passe doit contenir au moins 6 caracteres")
+    user_doc = await db.users.find_one({"id": u["id"]}, {"_id": 0})
+    if not user_doc or not verify_pw(old_pw, user_doc.get("password_hash", "")):
+        raise HTTPException(400, "Ancien mot de passe incorrect")
+    await db.users.update_one({"id": u["id"]}, {"$set": {"password_hash": hash_pw(new_pw)}})
+    return {"message": "Mot de passe modifie avec succes"}
+
 # ===================== ACCESS REQUESTS =====================
 @api_router.post("/access-requests")
 async def create_access_request(request: Request):
     b = await request.json()
+    # Hash password if provided
+    if b.get("password"):
+        b["password_hash"] = hash_pw(b.pop("password"))
+    b.pop("password_confirm", None)
     b["id"] = str(uuid.uuid4())
     b["status"] = "en_attente"
     b["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.access_requests.insert_one(b)
-    return {k: v for k, v in b.items() if k != "_id"}
+    return {k: v for k, v in b.items() if k not in ["_id", "password_hash"]}
 
 @api_router.get("/access-requests")
 async def list_access_requests(request: Request):
@@ -593,7 +613,30 @@ async def list_access_requests(request: Request):
 async def update_access_request(id: str, request: Request):
     await require_admin(request)
     b = await request.json()
-    return await crud_update("access_requests", id, b)
+    # If accepting, create user account
+    if b.get("status") == "acceptee" and b.get("create_account"):
+        req = await db.access_requests.find_one({"id": id}, {"_id": 0})
+        if not req:
+            raise HTTPException(404, "Demande non trouvee")
+        role = b.get("role", "formateur")
+        email = req.get("email", "").lower().strip()
+        existing = await db.users.find_one({"email": email})
+        if existing:
+            raise HTTPException(400, "Un compte existe deja avec cet email")
+        user_data = {
+            "id": str(uuid.uuid4()), "email": email,
+            "nom": req.get("nom", ""), "prenom": req.get("prenom", ""),
+            "role": role, "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        # Use password from request or provided override
+        if b.get("password"):
+            user_data["password_hash"] = hash_pw(b["password"])
+        elif req.get("password_hash"):
+            user_data["password_hash"] = req["password_hash"]
+        else:
+            raise HTTPException(400, "Aucun mot de passe defini")
+        await db.users.insert_one(user_data)
+    return await crud_update("access_requests", id, {"status": b.get("status", "en_attente")})
 
 @api_router.delete("/access-requests/{id}")
 async def delete_access_request(id: str, request: Request):
