@@ -97,19 +97,22 @@ export default function PlanningGlobal() {
 
   const renderBlock = (s) => {
     const at = atMap[s.type_activite_id] || {};
+    const ue = ueMap[s.ue_id] || {};
+    const grp = grpMap[s.group_id] || {};
     const formNames = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
     return (
       <div key={s.id} data-testid={`session-block-${s.id}`}
-        className="planning-block px-1 py-0.5 text-[10px] cursor-pointer overflow-hidden border-l-2"
+        className="planning-block px-1 py-0.5 text-[10px] cursor-pointer overflow-hidden border-l-2 leading-tight"
         style={{ backgroundColor: at.couleur ? `${at.couleur}25` : '#e2e8f0', borderLeftColor: at.couleur || '#94a3b8' }}
         onClick={(e) => { e.stopPropagation(); isAdmin && startEdit(s); }}
         onMouseEnter={(e) => handleMouseEnter(e, s)} onMouseLeave={() => setHoveredSession(null)}>
         <div className="flex items-center gap-0.5">
           <span className="font-bold" style={{ color: at.couleur }}>{at.nom}</span>
-          {s.statut === 'Valide' && <Check size={8} className="text-green-600" />}
-          {s.saisi && <Edit2 size={8} className="text-blue-500" />}
+          {ue.code_ue && <span className="text-slate-500 truncate">{ue.code_ue}</span>}
+          {s.statut === 'Valide' && <Check size={7} className="text-green-600 flex-shrink-0" />}
+          {s.saisi && <Edit2 size={7} className="text-blue-500 flex-shrink-0" />}
         </div>
-        <div className="truncate text-[9px]">{s.intitule}</div>
+        <div className="text-[9px] text-slate-500">{s.heure_debut}-{s.heure_fin}{grp.libelle ? ` · ${grp.libelle}` : ''}</div>
         <div className="font-bold text-black">{formNames}</div>
       </div>
     );
