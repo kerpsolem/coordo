@@ -275,7 +275,10 @@ async def list_sessions(request: Request, promotion_id: Optional[str] = None, fo
                         annee_scolaire_id: Optional[str] = None):
     q = {}
     if promotion_id:
-        q["promotion_id"] = promotion_id
+        if ',' in promotion_id:
+            q["promotion_id"] = {"$in": promotion_id.split(",")}
+        else:
+            q["promotion_id"] = promotion_id
     if formateur_id:
         q["formateur_ids"] = formateur_id
     if semestre:

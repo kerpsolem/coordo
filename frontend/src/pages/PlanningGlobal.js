@@ -35,7 +35,7 @@ export default function PlanningGlobal() {
   const [groups, setGroups] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [sideByView, setSideByView] = useState(false);
-  const [filterPromo, setFilterPromo] = useState('all');
+  const [selectedPromos, setSelectedPromos] = useState(new Set());
   const [filterSemestre, setFilterSemestre] = useState('all');
   const [editSession, setEditSession] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
@@ -54,7 +54,7 @@ export default function PlanningGlobal() {
     const dateDebut = format(days[0], 'yyyy-MM-dd');
     const dateFin = format(days[4], 'yyyy-MM-dd');
     const params = { date_debut: dateDebut, date_fin: dateFin };
-    if (filterPromo !== 'all') params.promotion_id = filterPromo;
+    if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
       const [sessR, absR, proR, fmR, atR, ueR, domR, sitR, grpR] = await Promise.all([
@@ -65,7 +65,7 @@ export default function PlanningGlobal() {
       setSessions(sessR.data); setAbsences(absR.data); setPromotions(proR.data); setFormateurs(fmR.data);
       setActTypes(atR.data); setUes(ueR.data); setDomains(domR.data); setSites(sitR.data); setGroups(grpR.data);
     } catch (e) { console.error(e); }
-  }, [currentDate, filterPromo, filterSemestre]);
+  }, [currentDate, selectedPromos, filterSemestre]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -75,13 +75,13 @@ export default function PlanningGlobal() {
 
   const prevWeek = () => setCurrentDate(d => addWeeks(d, -1));
   const nextWeek = () => setCurrentDate(d => addWeeks(d, 1));
-  const displayPromos = filterPromo === 'all' ? promotions : promotions.filter(p => p.id === filterPromo);
+  const displayPromos = selectedPromos.size === 0 ? promotions : promotions.filter(p => selectedPromos.has(p.id));
   const getAbsForDay = (dayStr) => [...new Set(absences.filter(a => a.date === dayStr).map(a => a.formateur_initiales))];
 
   const startEdit = (s) => { setEditSession({ ...s, formateur_ids: s.formateur_ids || [] }); setShowDialog(true); };
   const startNew = (dayStr, hour) => {
     const hEnd = hour ? `${String(Math.min(parseInt(hour.split(':')[0]) + 2, 18)).padStart(2, '0')}:${hour.split(':')[1]}` : '10:00';
-    setEditSession({ date: dayStr, heure_debut: hour || '08:00', heure_fin: hEnd, type_activite_id: '', promotion_id: filterPromo !== 'all' ? filterPromo : '',
+    setEditSession({ date: dayStr, heure_debut: hour || '08:00', heure_fin: hEnd, type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
       group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: '' });
     setShowDialog(true);
   };
@@ -336,13 +336,21 @@ export default function PlanningGlobal() {
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Select value={filterPromo} onValueChange={setFilterPromo}>
-          <SelectTrigger className="w-52 h-8 text-xs" data-testid="filter-promo"><SelectValue placeholder="Toutes promotions" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes les promotions</SelectItem>
-            {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <Button variant={selectedPromos.size === 0 ? "default" : "outline"} size="sm" className="h-8 text-xs"
+          onClick={() => setSelectedPromos(new Set())} data-testid="filter-promo-all">Toutes</Button>
+        {promotions.map(p => (
+          <Button key={p.id} size="sm" className="h-8 text-xs"
+            variant={selectedPromos.has(p.id) ? "default" : "outline"}
+            onClick={() => {
+              const next = new Set(selectedPromos);
+              if (next.has(p.id)) { next.delete(p.id); } else { next.add(p.id); }
+              setSelectedPromos(next);
+            }}
+            data-testid={`filter-promo-${p.id}`}>
+            {p.nom.replace('Promotion ', '')}
+          </Button>
+        ))}
+        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
         <Select value={filterSemestre} onValueChange={setFilterSemestre}>
           <SelectTrigger className="w-36 h-8 text-xs" data-testid="filter-semestre"><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
@@ -360,15 +368,15 @@ export default function PlanningGlobal() {
       </div>
 
       {/* Grid display */}
-      {sideByView && filterPromo === 'all' ? (
+      {sideByView && displayPromos.length > 1 ? (
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${displayPromos.length}, 1fr)` }}>
           {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={p.nom} />)}
         </div>
       ) : (
         <div className="space-y-3">
-          {filterPromo === 'all' ? displayPromos.map(p => (
-            <PromoGrid key={p.id} promoId={p.id} promoName={p.nom} />
-          )) : <PromoGrid promoId={filterPromo} />}
+          {displayPromos.map(p => (
+            <PromoGrid key={p.id} promoId={p.id} promoName={displayPromos.length > 1 ? p.nom : undefined} />
+          ))}
         </div>
       )}
 
