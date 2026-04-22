@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import API from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
@@ -8,11 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
-import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, FileDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, FileDown, GripVertical } from 'lucide-react';
 import { format, addDays, startOfWeek, getWeek, addWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 function timeToMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function minToTime(m) { const h = Math.floor(m / 15) * 15; const hh = Math.floor(h / 60); const mm = h % 60; return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+function snapTo15(m) { return Math.round(m / 15) * 15; }
+
 const START_MIN = 7 * 60 + 30;
 const END_MIN = 18 * 60;
 const TOTAL_MIN = END_MIN - START_MIN;
@@ -38,6 +41,10 @@ export default function PlanningGlobal() {
   const [showDialog, setShowDialog] = useState(false);
   const [hoveredSession, setHoveredSession] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  // Drag state
+  const [dragInfo, setDragInfo] = useState(null); // { sessionId, mode: 'move'|'resize-bottom', startY, origTop, origHeight, origStart, origEnd, dayColRef }
+  const [dragPreview, setDragPreview] = useState(null); // { top, height, startTime, endTime }
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekNum = getWeek(currentDate, { weekStartsOn: 1 });
@@ -89,37 +96,134 @@ export default function PlanningGlobal() {
   const deleteSession = async (id) => { if (!window.confirm('Supprimer cette seance ?')) return; try { await API.delete(`/sessions/${id}`); setShowDialog(false); loadData(); } catch (e) { console.error(e); } };
   const toggleField = async (id, field, value) => { try { await API.patch(`/sessions/${id}/toggle`, { field, value }); loadData(); } catch (e) { console.error(e); } };
 
+  // ---- DRAG & RESIZE ----
+  const handleDragStart = (e, session, mode) => {
+    if (!isAdmin) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const startMin = timeToMin(session.heure_debut);
+    const endMin = timeToMin(session.heure_fin);
+    const top = (startMin - START_MIN) * PX_PER_MIN;
+    const height = (endMin - startMin) * PX_PER_MIN;
+    setDragInfo({ sessionId: session.id, session, mode, startY: e.clientY, origTop: top, origHeight: height, origStart: startMin, origEnd: endMin });
+    setDragPreview({ top, height, startTime: session.heure_debut, endTime: session.heure_fin });
+    setHoveredSession(null);
+  };
+
+  const handleGlobalMouseMove = useCallback((e) => {
+    if (!dragInfo) return;
+    const deltaY = e.clientY - dragInfo.startY;
+    const deltaMins = snapTo15(deltaY / PX_PER_MIN);
+
+    if (dragInfo.mode === 'move') {
+      const newStart = Math.max(START_MIN, Math.min(END_MIN - (dragInfo.origEnd - dragInfo.origStart), dragInfo.origStart + deltaMins));
+      const dur = dragInfo.origEnd - dragInfo.origStart;
+      const newEnd = newStart + dur;
+      setDragPreview({
+        top: (newStart - START_MIN) * PX_PER_MIN,
+        height: dur * PX_PER_MIN,
+        startTime: minToTime(newStart),
+        endTime: minToTime(newEnd)
+      });
+    } else if (dragInfo.mode === 'resize-bottom') {
+      const newEnd = Math.max(dragInfo.origStart + 15, Math.min(END_MIN, dragInfo.origEnd + deltaMins));
+      setDragPreview({
+        top: dragInfo.origTop,
+        height: (newEnd - dragInfo.origStart) * PX_PER_MIN,
+        startTime: minToTime(dragInfo.origStart),
+        endTime: minToTime(newEnd)
+      });
+    }
+  }, [dragInfo]);
+
+  const handleGlobalMouseUp = useCallback(async () => {
+    if (!dragInfo || !dragPreview) { setDragInfo(null); setDragPreview(null); return; }
+    try {
+      await API.put(`/sessions/${dragInfo.sessionId}`, {
+        ...dragInfo.session,
+        heure_debut: dragPreview.startTime,
+        heure_fin: dragPreview.endTime
+      });
+      loadData();
+    } catch (e) { console.error(e); }
+    setDragInfo(null);
+    setDragPreview(null);
+  }, [dragInfo, dragPreview, loadData]);
+
+  useEffect(() => {
+    if (dragInfo) {
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+      return () => { window.removeEventListener('mousemove', handleGlobalMouseMove); window.removeEventListener('mouseup', handleGlobalMouseUp); };
+    }
+  }, [dragInfo, handleGlobalMouseMove, handleGlobalMouseUp]);
+
   const handleMouseEnter = (e, s) => {
+    if (dragInfo) return;
     const r = e.currentTarget.getBoundingClientRect();
     setTooltipPos({ x: Math.min(r.right + 8, window.innerWidth - 320), y: Math.min(r.top, window.innerHeight - 320) });
     setHoveredSession(s);
   };
 
-  const renderBlock = (s) => {
+  const renderBlock = (s, blockTop, blockHeight) => {
     const at = atMap[s.type_activite_id] || {};
     const ue = ueMap[s.ue_id] || {};
     const grp = grpMap[s.group_id] || {};
     const formNames = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
+    const isDragging = dragInfo?.sessionId === s.id;
+    const showPreview = isDragging && dragPreview;
+
     return (
       <div key={s.id} data-testid={`session-block-${s.id}`}
-        className="planning-block px-1 py-0.5 text-[10px] cursor-pointer overflow-hidden border-l-2 leading-tight"
+        className={`planning-block px-1 py-0.5 text-[10px] overflow-hidden border-l-2 leading-tight h-full relative select-none
+          ${isDragging ? 'opacity-40' : 'cursor-pointer'}`}
         style={{ backgroundColor: at.couleur ? `${at.couleur}25` : '#e2e8f0', borderLeftColor: at.couleur || '#94a3b8' }}
-        onClick={(e) => { e.stopPropagation(); isAdmin && startEdit(s); }}
-        onMouseEnter={(e) => handleMouseEnter(e, s)} onMouseLeave={() => setHoveredSession(null)}>
-        <div className="flex items-center gap-0.5">
+        onClick={(e) => { e.stopPropagation(); if (!dragInfo) isAdmin && startEdit(s); }}
+        onMouseEnter={(e) => handleMouseEnter(e, s)} onMouseLeave={() => !dragInfo && setHoveredSession(null)}>
+        {/* Move handle */}
+        {isAdmin && (
+          <div className="absolute top-0 left-0 right-0 h-3 cursor-grab active:cursor-grabbing z-10 flex items-center justify-center"
+            onMouseDown={(e) => handleDragStart(e, s, 'move')}>
+            <GripVertical size={8} className="text-slate-400 opacity-0 hover:opacity-100" />
+          </div>
+        )}
+        <div className="flex items-center gap-0.5 mt-0.5">
           <span className="font-bold" style={{ color: at.couleur }}>{at.nom}</span>
-          {ue.code_ue && <span className="text-slate-500 truncate">{ue.code_ue}</span>}
+          {ue.code_ue && <span className="text-slate-500">{ue.code_ue}</span>}
           {s.statut === 'Valide' && <Check size={7} className="text-green-600 flex-shrink-0" />}
           {s.saisi && <Edit2 size={7} className="text-blue-500 flex-shrink-0" />}
         </div>
+        {s.intitule && <div className="truncate text-[9px] text-slate-600 dark:text-slate-300">{s.intitule}</div>}
         <div className="text-[9px] text-slate-500">{s.heure_debut}-{s.heure_fin}{grp.libelle ? ` · ${grp.libelle}` : ''}</div>
         <div className="font-bold text-black">{formNames}</div>
+        {/* Resize handle bottom */}
+        {isAdmin && (
+          <div className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize z-10 group"
+            onMouseDown={(e) => handleDragStart(e, s, 'resize-bottom')}>
+            <div className="w-8 h-1 mx-auto rounded bg-slate-300 opacity-0 group-hover:opacity-100 mt-0.5" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Drag overlay with live time display
+  const renderDragOverlay = () => {
+    if (!dragInfo || !dragPreview) return null;
+    const at = atMap[dragInfo.session.type_activite_id] || {};
+    return (
+      <div className="fixed z-[200] pointer-events-none" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
+        <div className="fixed bg-white dark:bg-slate-800 border-2 border-blue-500 rounded-lg shadow-2xl px-3 py-2 z-[201]"
+          style={{ left: '50%', top: 12, transform: 'translateX(-50%)' }}>
+          <span className="text-sm font-bold text-blue-600">{dragPreview.startTime} - {dragPreview.endTime}</span>
+          <span className="text-xs text-slate-500 ml-2">({Math.round((timeToMin(dragPreview.endTime) - timeToMin(dragPreview.startTime)) / 60 * 100) / 100}h)</span>
+        </div>
       </div>
     );
   };
 
   const renderTooltip = () => {
-    if (!hoveredSession) return null;
+    if (!hoveredSession || dragInfo) return null;
     const s = hoveredSession, at = atMap[s.type_activite_id] || {}, promo = promoMap[s.promotion_id] || {};
     const ue = ueMap[s.ue_id] || {}, dom = domMap[s.domain_id] || domMap[ue.domain_id] || {};
     const site = siteMap[s.site_id] || {}, grp = grpMap[s.group_id] || {};
@@ -189,23 +293,25 @@ export default function PlanningGlobal() {
 
               return (
                 <div key={di} className="border-r border-slate-200 dark:border-slate-700 relative" style={{ height: GRID_H }}
-                  onClick={() => isAdmin && startNew(dayStr, '08:00')}>
+                  onClick={() => isAdmin && !dragInfo && startNew(dayStr, '08:00')}>
                   {/* Hour lines */}
                   {Array.from({ length: 11 }, (_, i) => 8 + i).map(h => (
                     <div key={h} className="absolute w-full border-t border-slate-100 dark:border-slate-800/50" style={{ top: (h * 60 - START_MIN) * PX_PER_MIN }} />
                   ))}
 
                   {/* Sessions */}
-                  {daySessions.map((s, si) => {
-                    const top = Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
-                    const height = Math.max(18, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
+                  {daySessions.map((s) => {
+                    const isDragging = dragInfo?.sessionId === s.id;
+                    const sTop = isDragging && dragPreview ? dragPreview.top : Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
+                    const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
                     const overlapping = daySessions.filter(o => o.id !== s.id && timeToMin(o.heure_debut) < timeToMin(s.heure_fin) && timeToMin(o.heure_fin) > timeToMin(s.heure_debut));
                     const total = overlapping.length + 1;
                     const idx = overlapping.filter(o => daySessions.indexOf(o) < daySessions.indexOf(s)).length;
                     return (
-                      <div key={s.id} className="absolute px-0.5" style={{ top, height, width: `${100 / total}%`, left: `${(idx * 100) / total}%`, zIndex: 15 }}
+                      <div key={s.id} className={`absolute px-0.5 ${isDragging ? 'z-50' : 'z-[15]'}`}
+                        style={{ top: sTop, height: sHeight, width: `${100 / total}%`, left: `${(idx * 100) / total}%` }}
                         onClick={e => e.stopPropagation()}>
-                        {renderBlock(s)}
+                        {renderBlock(s, sTop, sHeight)}
                       </div>
                     );
                   })}
@@ -267,6 +373,7 @@ export default function PlanningGlobal() {
       )}
 
       {renderTooltip()}
+      {renderDragOverlay()}
 
       {/* Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
