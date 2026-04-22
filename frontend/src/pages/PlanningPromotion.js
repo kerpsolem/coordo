@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, addWeeks, addDays, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -69,7 +69,6 @@ export default function PlanningPromotion() {
     <div className="space-y-4" data-testid="planning-promotion">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Par promotion</h1>
-        <Button variant="outline" size="sm" onClick={() => window.print()}><FileDown size={14} className="mr-1" />Export</Button>
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">

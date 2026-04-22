@@ -9,7 +9,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../components/ui/collapsible';
-import { Plus, Edit2, Trash2, Copy, FileDown, ChevronDown, ChevronRight, User } from 'lucide-react';
+import { Plus, Edit2, Trash2, Copy, ChevronDown, ChevronRight, User } from 'lucide-react';
 
 export default function AttributionCopies() {
   const { isAdmin } = useAuth();
@@ -91,7 +91,6 @@ export default function AttributionCopies() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Attribution des copies</h1>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.print()}><FileDown size={14} className="mr-1" />Export PDF</Button>
           {isAdmin && <Button size="sm" onClick={() => startNew()} data-testid="new-attribution"><Plus size={14} className="mr-1" />Nouvelle attribution</Button>}
         </div>
       </div>

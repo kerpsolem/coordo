@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
-import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, FileDown, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, GripVertical } from 'lucide-react';
 import { format, addDays, startOfWeek, getWeek, addWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -42,9 +42,13 @@ export default function PlanningGlobal() {
   const [hoveredSession, setHoveredSession] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
-  // Drag state
-  const [dragInfo, setDragInfo] = useState(null); // { sessionId, mode: 'move'|'resize-bottom', startY, origTop, origHeight, origStart, origEnd, dayColRef }
-  const [dragPreview, setDragPreview] = useState(null); // { top, height, startTime, endTime }
+  // Drag state for moving/resizing existing sessions
+  const [dragInfo, setDragInfo] = useState(null);
+  const [dragPreview, setDragPreview] = useState(null);
+
+  // Click-drag state for creating new sessions
+  const [createDrag, setCreateDrag] = useState(null); // { dayStr, startY, colTop, startMin }
+  const [createPreview, setCreatePreview] = useState(null); // { top, height, startTime, endTime }
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekNum = getWeek(currentDate, { weekStartsOn: 1 });
@@ -112,52 +116,57 @@ export default function PlanningGlobal() {
   };
 
   const handleGlobalMouseMove = useCallback((e) => {
-    if (!dragInfo) return;
-    const deltaY = e.clientY - dragInfo.startY;
-    const deltaMins = snapTo15(deltaY / PX_PER_MIN);
-
-    if (dragInfo.mode === 'move') {
-      const newStart = Math.max(START_MIN, Math.min(END_MIN - (dragInfo.origEnd - dragInfo.origStart), dragInfo.origStart + deltaMins));
-      const dur = dragInfo.origEnd - dragInfo.origStart;
-      const newEnd = newStart + dur;
-      setDragPreview({
-        top: (newStart - START_MIN) * PX_PER_MIN,
-        height: dur * PX_PER_MIN,
-        startTime: minToTime(newStart),
-        endTime: minToTime(newEnd)
-      });
-    } else if (dragInfo.mode === 'resize-bottom') {
-      const newEnd = Math.max(dragInfo.origStart + 15, Math.min(END_MIN, dragInfo.origEnd + deltaMins));
-      setDragPreview({
-        top: dragInfo.origTop,
-        height: (newEnd - dragInfo.origStart) * PX_PER_MIN,
-        startTime: minToTime(dragInfo.origStart),
-        endTime: minToTime(newEnd)
-      });
+    if (dragInfo) {
+      const deltaY = e.clientY - dragInfo.startY;
+      const deltaMins = snapTo15(deltaY / PX_PER_MIN);
+      if (dragInfo.mode === 'move') {
+        const newStart = Math.max(START_MIN, Math.min(END_MIN - (dragInfo.origEnd - dragInfo.origStart), dragInfo.origStart + deltaMins));
+        const dur = dragInfo.origEnd - dragInfo.origStart;
+        setDragPreview({ top: (newStart - START_MIN) * PX_PER_MIN, height: dur * PX_PER_MIN, startTime: minToTime(newStart), endTime: minToTime(newStart + dur) });
+      } else if (dragInfo.mode === 'resize-bottom') {
+        const newEnd = Math.max(dragInfo.origStart + 15, Math.min(END_MIN, dragInfo.origEnd + deltaMins));
+        setDragPreview({ top: dragInfo.origTop, height: (newEnd - dragInfo.origStart) * PX_PER_MIN, startTime: minToTime(dragInfo.origStart), endTime: minToTime(newEnd) });
+      }
     }
-  }, [dragInfo]);
+    if (createDrag) {
+      const deltaY = e.clientY - createDrag.startY;
+      const endMin = snapTo15(Math.max(createDrag.startMin + 15, Math.min(END_MIN, createDrag.startMin + deltaY / PX_PER_MIN)));
+      const top = (createDrag.startMin - START_MIN) * PX_PER_MIN;
+      const height = (endMin - createDrag.startMin) * PX_PER_MIN;
+      setCreatePreview({ top, height, startTime: minToTime(createDrag.startMin), endTime: minToTime(endMin) });
+    }
+  }, [dragInfo, createDrag]);
 
   const handleGlobalMouseUp = useCallback(async () => {
-    if (!dragInfo || !dragPreview) { setDragInfo(null); setDragPreview(null); return; }
-    try {
-      await API.put(`/sessions/${dragInfo.sessionId}`, {
-        ...dragInfo.session,
-        heure_debut: dragPreview.startTime,
-        heure_fin: dragPreview.endTime
+    if (dragInfo && dragPreview) {
+      try {
+        await API.put(`/sessions/${dragInfo.sessionId}`, { ...dragInfo.session, heure_debut: dragPreview.startTime, heure_fin: dragPreview.endTime });
+        loadData();
+      } catch (e) { console.error(e); }
+      setDragInfo(null); setDragPreview(null);
+      return;
+    }
+    if (createDrag && createPreview) {
+      setHoveredSession(null);
+      setEditSession({
+        date: createDrag.dayStr, heure_debut: createPreview.startTime, heure_fin: createPreview.endTime,
+        type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
+        group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: ''
       });
-      loadData();
-    } catch (e) { console.error(e); }
-    setDragInfo(null);
-    setDragPreview(null);
-  }, [dragInfo, dragPreview, loadData]);
+      setShowDialog(true);
+      setCreateDrag(null); setCreatePreview(null);
+      return;
+    }
+    setDragInfo(null); setDragPreview(null); setCreateDrag(null); setCreatePreview(null);
+  }, [dragInfo, dragPreview, createDrag, createPreview, loadData, selectedPromos]);
 
   useEffect(() => {
-    if (dragInfo) {
+    if (dragInfo || createDrag) {
       window.addEventListener('mousemove', handleGlobalMouseMove);
       window.addEventListener('mouseup', handleGlobalMouseUp);
       return () => { window.removeEventListener('mousemove', handleGlobalMouseMove); window.removeEventListener('mouseup', handleGlobalMouseUp); };
     }
-  }, [dragInfo, handleGlobalMouseMove, handleGlobalMouseUp]);
+  }, [dragInfo, createDrag, handleGlobalMouseMove, handleGlobalMouseUp]);
 
   const handleMouseEnter = (e, s) => {
     if (dragInfo) return;
@@ -208,16 +217,16 @@ export default function PlanningGlobal() {
     );
   };
 
-  // Drag overlay with live time display
   const renderDragOverlay = () => {
-    if (!dragInfo || !dragPreview) return null;
-    const at = atMap[dragInfo.session.type_activite_id] || {};
+    const preview = dragInfo && dragPreview ? dragPreview : createDrag && createPreview ? createPreview : null;
+    if (!preview) return null;
+    const durMin = timeToMin(preview.endTime) - timeToMin(preview.startTime);
     return (
       <div className="fixed z-[200] pointer-events-none" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
         <div className="fixed bg-white dark:bg-slate-800 border-2 border-blue-500 rounded-lg shadow-2xl px-3 py-2 z-[201]"
           style={{ left: '50%', top: 12, transform: 'translateX(-50%)' }}>
-          <span className="text-sm font-bold text-blue-600">{dragPreview.startTime} - {dragPreview.endTime}</span>
-          <span className="text-xs text-slate-500 ml-2">({Math.round((timeToMin(dragPreview.endTime) - timeToMin(dragPreview.startTime)) / 60 * 100) / 100}h)</span>
+          <span className="text-sm font-bold text-blue-600">{preview.startTime} - {preview.endTime}</span>
+          <span className="text-xs text-slate-500 ml-2">({Math.round(durMin / 60 * 100) / 100}h)</span>
         </div>
       </div>
     );
@@ -294,11 +303,28 @@ export default function PlanningGlobal() {
 
               return (
                 <div key={di} className="border-r border-slate-200 dark:border-slate-700 relative" style={{ height: GRID_H }}
-                  onClick={() => isAdmin && !dragInfo && startNew(dayStr, '08:00')}>
+                  onMouseDown={(e) => {
+                    if (!isAdmin || dragInfo || e.button !== 0) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const offsetY = e.clientY - rect.top;
+                    const clickMin = snapTo15(START_MIN + offsetY / PX_PER_MIN);
+                    if (clickMin < START_MIN || clickMin >= END_MIN) return;
+                    setCreateDrag({ dayStr, startY: e.clientY, colTop: rect.top, startMin: clickMin });
+                    setCreatePreview({ top: (clickMin - START_MIN) * PX_PER_MIN, height: 15 * PX_PER_MIN, startTime: minToTime(clickMin), endTime: minToTime(clickMin + 15) });
+                    e.preventDefault();
+                  }}>
                   {/* Hour lines */}
                   {Array.from({ length: 11 }, (_, i) => 8 + i).map(h => (
                     <div key={h} className="absolute w-full border-t border-slate-100 dark:border-slate-800/50" style={{ top: (h * 60 - START_MIN) * PX_PER_MIN }} />
                   ))}
+
+                  {/* Create preview */}
+                  {createDrag && createDrag.dayStr === dayStr && createPreview && (
+                    <div className="absolute left-0 right-0 mx-0.5 rounded border-2 border-dashed border-blue-500 bg-blue-100/50 dark:bg-blue-900/30 z-40 pointer-events-none flex items-center justify-center"
+                      style={{ top: createPreview.top, height: Math.max(createPreview.height, 15 * PX_PER_MIN) }}>
+                      <span className="text-[10px] font-bold text-blue-600">{createPreview.startTime} - {createPreview.endTime}</span>
+                    </div>
+                  )}
 
                   {/* Sessions */}
                   {daySessions.map((s) => {
@@ -365,7 +391,6 @@ export default function PlanningGlobal() {
           <Columns size={14} className="mr-1" /> Cote a cote
         </Button>
         {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={() => startNew(format(new Date(), 'yyyy-MM-dd'))} data-testid="new-session-btn"><Plus size={14} className="mr-1" /> Nouvelle seance</Button>}
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => window.print()}><FileDown size={14} className="mr-1" /> PDF</Button>
       </div>
 
       {/* Grid display */}

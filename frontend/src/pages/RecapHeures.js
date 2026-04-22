@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { FileDown, Filter } from 'lucide-react';
+import { Filter } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addWeeks, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -58,13 +58,10 @@ export default function RecapHeures() {
 
   useEffect(() => { if (dateDebut && dateFin) fetchData(); }, [fetchData, dateDebut, dateFin]);
 
-  const exportPDF = () => { window.print(); };
-
   return (
     <div className="space-y-4" data-testid="recap-heures">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Recap heures</h1>
-        <Button variant="outline" size="sm" onClick={exportPDF} data-testid="export-pdf"><FileDown size={14} className="mr-1" />Export PDF</Button>
       </div>
 
       {/* Filters */}

@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { FileDown, Clock, Users, BarChart3 } from 'lucide-react';
+import { Clock, Users, BarChart3 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, addWeeks, getWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -81,7 +81,6 @@ export default function PlanningFormateur() {
     <div className="space-y-4" data-testid="planning-formateur">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Par formateur</h1>
-        <Button variant="outline" size="sm" onClick={() => window.print()}><FileDown size={14} className="mr-1" />Export PDF</Button>
       </div>
 
       {/* Filters */}
