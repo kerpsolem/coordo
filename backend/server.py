@@ -719,7 +719,8 @@ QUOTES = [
 
 @api_router.get("/dashboard")
 async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = None,
-                    semestre: Optional[str] = None, annee_scolaire_id: Optional[str] = None):
+                    semestre: Optional[str] = None, annee_scolaire_id: Optional[str] = None,
+                    promotion_id: Optional[str] = None):
     today = date.today()
     today_key = today.strftime("%m-%d")
     saint = SAINTS.get(today_key, "")
@@ -741,6 +742,10 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
             q["semestre"] = {"$in": ["S1", "S3", "S5"]}
         else:
             q["semestre"] = semestre
+    if promotion_id:
+        q["promotion_id"] = promotion_id
+    if annee_scolaire_id:
+        q["annee_scolaire_id"] = annee_scolaire_id
 
     sessions = await db.sessions.find(q, {"_id": 0}).to_list(10000)
     promotions = {p["id"]: p for p in await crud_list("promotions")}

@@ -47,18 +47,11 @@ export default function Dashboard() {
 
     const params = { date_debut: dateDebut, date_fin: dateFin };
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
+    if (filterPromo !== 'all') params.promotion_id = filterPromo;
+    if (filterAnneeSco !== 'all') params.annee_scolaire_id = filterAnneeSco;
 
     try {
       const { data: d } = await API.get('/dashboard', { params });
-      // Client-side filter by promotion
-      if (filterPromo !== 'all' && d.heures_par_promotion) {
-        const promoName = promotions.find(p => p.id === filterPromo)?.nom;
-        if (promoName) {
-          const filtered = {};
-          if (d.heures_par_promotion[promoName] !== undefined) filtered[promoName] = d.heures_par_promotion[promoName];
-          d.heures_par_promotion = filtered;
-        }
-      }
       setData(d);
     } catch (e) { console.error(e); }
     setLoading(false);
