@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Checkbox } from '../components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Edit2, Trash2, Database, Users, MapPin, BookOpen, Layers, GraduationCap, Calendar as CalIcon, Settings } from 'lucide-react';
+import { Plus, Edit2, Trash2, Database, Users, MapPin, BookOpen, Layers, GraduationCap, Calendar as CalIcon, Settings, Mail, Check, X } from 'lucide-react';
 
 function CrudTable({ title, icon: Icon, items, columns, onAdd, onEdit, onDelete, isAdmin }) {
   return (
@@ -56,6 +56,7 @@ export default function Administration() {
   const [ues, setUes] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
   const [users, setUsers] = useState([]);
+  const [accessRequests, setAccessRequests] = useState([]);
   const [editItem, setEditItem] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogType, setDialogType] = useState('');
@@ -71,6 +72,7 @@ export default function Administration() {
       setSites(si.data); setActTypes(at.data); setDomains(dm.data);
       setUes(ue.data); setSchoolYears(sy.data);
       try { const u = await API.get('/users'); setUsers(u.data); } catch {}
+      try { const ar = await API.get('/access-requests'); setAccessRequests(ar.data); } catch {}
     } catch (e) { console.error(e); }
   };
 
@@ -181,6 +183,7 @@ export default function Administration() {
           <TabsTrigger value="ues">UEs</TabsTrigger>
           <TabsTrigger value="schoolYears">Annees scolaires</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="users">Utilisateurs</TabsTrigger>}
+          {isSuperAdmin && <TabsTrigger value="accessRequests">Demandes d'acces {accessRequests.filter(r => r.status === 'en_attente').length > 0 ? `(${accessRequests.filter(r => r.status === 'en_attente').length})` : ''}</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="formateurs">
@@ -232,12 +235,63 @@ export default function Administration() {
             onAdd={() => openDialog('schoolYears')} onEdit={i => openDialog('schoolYears', i)} onDelete={id => del('schoolYears', id)} />
         </TabsContent>
         {isSuperAdmin && (
+          <>
           <TabsContent value="users">
             <CrudTable title="Utilisateurs" icon={Users} items={users} isAdmin={isSuperAdmin}
               columns={[{ key: 'nom', label: 'Nom' }, { key: 'prenom', label: 'Prenom' }, { key: 'email', label: 'Email' },
                 { key: 'role', label: 'Role', render: i => i.role?.replace('_', ' ') }]}
               onAdd={() => openDialog('users')} onEdit={i => openDialog('users', i)} onDelete={id => del('users', id)} />
           </TabsContent>
+          <TabsContent value="accessRequests">
+            <Card>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-base font-semibold flex items-center gap-2"><Mail size={16} />Demandes d'acces</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead className="text-xs">Nom</TableHead><TableHead className="text-xs">Prenom</TableHead>
+                    <TableHead className="text-xs">Email</TableHead><TableHead className="text-xs">Message</TableHead>
+                    <TableHead className="text-xs">Date</TableHead><TableHead className="text-xs">Statut</TableHead>
+                    <TableHead className="text-xs">Actions</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {accessRequests.map(r => (
+                      <TableRow key={r.id} className="text-sm">
+                        <TableCell className="py-2">{r.nom}</TableCell>
+                        <TableCell className="py-2">{r.prenom}</TableCell>
+                        <TableCell className="py-2">{r.email}</TableCell>
+                        <TableCell className="py-2 text-xs max-w-40 truncate">{r.message || '-'}</TableCell>
+                        <TableCell className="py-2 text-xs">{r.created_at?.split('T')[0]}</TableCell>
+                        <TableCell className="py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium
+                            ${r.status === 'en_attente' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                              r.status === 'acceptee' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>{r.status}</span>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex gap-1">
+                            {r.status === 'en_attente' && (
+                              <>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" title="Accepter"
+                                  onClick={async () => { await API.patch(`/access-requests/${r.id}`, { status: 'acceptee' }); loadAll(); }}><Check size={14} /></Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" title="Refuser"
+                                  onClick={async () => { await API.patch(`/access-requests/${r.id}`, { status: 'refusee' }); loadAll(); }}><X size={14} /></Button>
+                              </>
+                            )}
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" title="Supprimer"
+                              onClick={async () => { if (window.confirm('Supprimer ?')) { await API.delete(`/access-requests/${r.id}`); loadAll(); } }}><Trash2 size={12} /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {accessRequests.length === 0 && <p className="text-center py-6 text-sm text-slate-500">Aucune demande</p>}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </>
         )}
       </Tabs>
 

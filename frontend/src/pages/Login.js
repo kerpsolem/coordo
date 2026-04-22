@@ -5,13 +5,18 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { LogIn } from 'lucide-react';
+import { LogIn, Mail, ArrowLeft, Check } from 'lucide-react';
+import API from '../lib/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
+  const [reqForm, setReqForm] = useState({ nom: '', prenom: '', email: '', message: '' });
+  const [reqSent, setReqSent] = useState(false);
+  const [reqError, setReqError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -31,6 +36,21 @@ export default function Login() {
     setLoading(false);
   };
 
+  const handleRequestAccess = async (e) => {
+    e.preventDefault();
+    setReqError('');
+    if (!reqForm.nom || !reqForm.prenom || !reqForm.email) {
+      setReqError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+    try {
+      await API.post('/access-requests', reqForm);
+      setReqSent(true);
+    } catch (err) {
+      setReqError(err.response?.data?.detail || 'Erreur lors de l\'envoi');
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-950" />
@@ -46,26 +66,72 @@ export default function Login() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Coordination pedagogique</p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400" data-testid="login-error">
-                {error}
+          {!showRequest ? (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="p-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400" data-testid="login-error">
+                    {error}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="votre@email.fr" required data-testid="login-email" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Mot de passe</Label>
+                  <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
+                    placeholder="Votre mot de passe" required data-testid="login-password" />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading} data-testid="login-submit">
+                  {loading ? 'Connexion...' : <><LogIn size={16} className="mr-2" /> Se connecter</>}
+                </Button>
+              </form>
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
+                <button onClick={() => setShowRequest(true)}
+                  className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors inline-flex items-center gap-1.5"
+                  data-testid="request-access-link">
+                  <Mail size={14} /> Demander un acces
+                </button>
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="votre@email.fr" required data-testid="login-email" />
+            </>
+          ) : reqSent ? (
+            <div className="text-center py-4 space-y-3">
+              <div className="mx-auto w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <Check size={24} className="text-green-600" />
+              </div>
+              <p className="text-sm font-medium">Demande envoyee</p>
+              <p className="text-xs text-slate-500">Votre demande d'acces a ete transmise a l'administrateur. Vous recevrez une reponse par email.</p>
+              <Button variant="outline" size="sm" onClick={() => { setShowRequest(false); setReqSent(false); setReqForm({ nom: '', prenom: '', email: '', message: '' }); }}>
+                <ArrowLeft size={14} className="mr-1" /> Retour a la connexion
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
-              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="Votre mot de passe" required data-testid="login-password" />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading} data-testid="login-submit">
-              {loading ? 'Connexion...' : <><LogIn size={16} className="mr-2" /> Se connecter</>}
-            </Button>
-          </form>
+          ) : (
+            <form onSubmit={handleRequestAccess} className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <button type="button" onClick={() => setShowRequest(false)} className="text-slate-400 hover:text-slate-600">
+                  <ArrowLeft size={16} />
+                </button>
+                <span className="text-sm font-semibold">Demander un acces</span>
+              </div>
+              {reqError && (
+                <div className="p-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-xs text-red-600">{reqError}</div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Nom *</Label><Input value={reqForm.nom} onChange={e => setReqForm({ ...reqForm, nom: e.target.value })} placeholder="Dupont" className="h-8 text-sm" data-testid="req-nom" /></div>
+                <div><Label className="text-xs">Prenom *</Label><Input value={reqForm.prenom} onChange={e => setReqForm({ ...reqForm, prenom: e.target.value })} placeholder="Marie" className="h-8 text-sm" data-testid="req-prenom" /></div>
+              </div>
+              <div><Label className="text-xs">Email *</Label><Input type="email" value={reqForm.email} onChange={e => setReqForm({ ...reqForm, email: e.target.value })} placeholder="votre@email.fr" className="h-8 text-sm" data-testid="req-email" /></div>
+              <div><Label className="text-xs">Message (optionnel)</Label>
+                <textarea className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" rows={2} placeholder="Motif de la demande..."
+                  value={reqForm.message} onChange={e => setReqForm({ ...reqForm, message: e.target.value })} data-testid="req-message" />
+              </div>
+              <Button type="submit" className="w-full" data-testid="req-submit">
+                <Mail size={14} className="mr-2" /> Envoyer la demande
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

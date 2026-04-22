@@ -573,6 +573,33 @@ async def delete_school_year(id: str, request: Request):
     await require_admin(request)
     return await crud_delete("school_years", id)
 
+
+# ===================== ACCESS REQUESTS =====================
+@api_router.post("/access-requests")
+async def create_access_request(request: Request):
+    b = await request.json()
+    b["id"] = str(uuid.uuid4())
+    b["status"] = "en_attente"
+    b["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.access_requests.insert_one(b)
+    return {k: v for k, v in b.items() if k != "_id"}
+
+@api_router.get("/access-requests")
+async def list_access_requests(request: Request):
+    await require_admin(request)
+    return await crud_list("access_requests", sort=[("created_at", -1)])
+
+@api_router.patch("/access-requests/{id}")
+async def update_access_request(id: str, request: Request):
+    await require_admin(request)
+    b = await request.json()
+    return await crud_update("access_requests", id, b)
+
+@api_router.delete("/access-requests/{id}")
+async def delete_access_request(id: str, request: Request):
+    await require_admin(request)
+    return await crud_delete("access_requests", id)
+
 # ===================== USERS MANAGEMENT =====================
 @api_router.get("/users")
 async def list_users(request: Request):
