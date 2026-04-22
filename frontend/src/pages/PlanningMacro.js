@@ -5,14 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Checkbox } from '../components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, GripVertical } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { format, addMonths, startOfMonth, endOfMonth, eachWeekOfInterval, endOfWeek, getWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachWeekOfInterval, endOfWeek, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-const ALL_MONTHS = [0,1,2,3,4,5,6,7,8,9,10,11];
 const MONTH_NAMES = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
 
 export default function PlanningMacro() {
@@ -25,19 +23,18 @@ export default function PlanningMacro() {
   const [schoolYears, setSchoolYears] = useState([]);
   const [filterPromo, setFilterPromo] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
-  const [filterDomain, setFilterDomain] = useState('all');
+  const [selectedDomains, setSelectedDomains] = useState(new Set());
   const [startYear, setStartYear] = useState(new Date().getFullYear());
-  const [selectedMonths, setSelectedMonths] = useState([8,9,10,11,0,1,2,3,4,5]); // sept-juin
+  const [selectedMonths, setSelectedMonths] = useState([8,9,10,11,0,1,2,3,4,5]);
+  const [zoom, setZoom] = useState(1);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [showPreSaisie, setShowPreSaisie] = useState(false);
   const [preSaisie, setPreSaisie] = useState(null);
+  const [dragSession, setDragSession] = useState(null);
+  const [dragOverWeek, setDragOverWeek] = useState(null);
 
-  // Build month list with year
-  const months = selectedMonths.map(m => {
-    const y = m >= 8 ? startYear : startYear + 1;
-    return new Date(y, m, 1);
-  });
+  const months = selectedMonths.map(m => new Date(m >= 8 ? startYear : startYear + 1, m, 1));
 
   const loadData = useCallback(async () => {
     if (months.length === 0) return;
@@ -46,7 +43,6 @@ export default function PlanningMacro() {
     const params = { date_debut: dateDebut, date_fin: dateFin };
     if (filterPromo !== 'all') params.promotion_id = filterPromo;
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
-    if (filterDomain !== 'all') params.domain_id = filterDomain;
     try {
       const [sessRes, prRes, atRes, ueRes, domRes, syRes] = await Promise.all([
         API.get('/sessions', { params }), API.get('/promotions'), API.get('/activity-types'),
@@ -55,7 +51,7 @@ export default function PlanningMacro() {
       setSessions(sessRes.data); setPromotions(prRes.data); setActTypes(atRes.data);
       setUes(ueRes.data); setDomains(domRes.data); setSchoolYears(syRes.data);
     } catch (e) { console.error(e); }
-  }, [startYear, selectedMonths, filterPromo, filterSemestre, filterDomain]);
+  }, [startYear, selectedMonths, filterPromo, filterSemestre]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -64,13 +60,12 @@ export default function PlanningMacro() {
   const domMap = Object.fromEntries(domains.map(d => [d.id, d]));
   const promoMap = Object.fromEntries(promotions.map(p => [p.id, p]));
 
-  const getWeeksForMonth = (monthDate) => eachWeekOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) }, { weekStartsOn: 1 });
-  const getSessionsForWeek = (weekStart) => {
-    const ws = format(weekStart, 'yyyy-MM-dd'), we = format(endOfWeek(weekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-    return sessions.filter(s => s.date >= ws && s.date <= we);
+  const getWeeksForMonth = (md) => eachWeekOfInterval({ start: startOfMonth(md), end: endOfMonth(md) }, { weekStartsOn: 1 });
+  const getSessionsForWeek = (ws) => {
+    const s = format(ws, 'yyyy-MM-dd'), e = format(endOfWeek(ws, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    return sessions.filter(x => x.date >= s && x.date <= e);
   };
 
-  // Hours by type per UE for the whole period
   const hoursByUe = {};
   sessions.forEach(s => {
     const uid = s.ue_id || 'none';
@@ -81,11 +76,17 @@ export default function PlanningMacro() {
 
   const toggleMonth = (m) => {
     setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m].sort((a, b) => {
-      const oa = a >= 8 ? a - 8 : a + 4;
-      const ob = b >= 8 ? b - 8 : b + 4;
-      return oa - ob;
+      const oa = a >= 8 ? a - 8 : a + 4; const ob = b >= 8 ? b - 8 : b + 4; return oa - ob;
     }));
   };
+
+  const toggleDomain = (did) => {
+    const next = new Set(selectedDomains);
+    if (next.has(did)) next.delete(did); else next.add(did);
+    setSelectedDomains(next);
+  };
+
+  const visibleDomains = selectedDomains.size === 0 ? domains : domains.filter(d => selectedDomains.has(d.id));
 
   const startPreSaisie = (weekStart, ueId) => {
     setHoveredItem(null);
@@ -111,22 +112,61 @@ export default function PlanningMacro() {
       if (!data.heure_fin) data.heure_fin = '10:00';
       if (preSaisie.id) await API.put(`/sessions/${preSaisie.id}`, data);
       else await API.post('/sessions', data);
-      setShowPreSaisie(false);
-      loadData();
+      setShowPreSaisie(false); loadData();
     } catch (e) { console.error(e); }
   };
 
   const handleHover = (e, s) => {
+    if (dragSession) return;
     const r = e.currentTarget.getBoundingClientRect();
     setHoverPos({ x: Math.min(r.right + 8, window.innerWidth - 300), y: Math.max(10, r.top - 60) });
     setHoveredItem(s);
   };
+
+  // Drag & drop between weeks
+  const handleDragStart = (e, session) => {
+    if (!isAdmin) return;
+    e.dataTransfer.effectAllowed = 'move';
+    setDragSession(session);
+    setHoveredItem(null);
+  };
+
+  const handleDragOver = (e, weekStart) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverWeek(format(weekStart, 'yyyy-MM-dd'));
+  };
+
+  const handleDrop = (e, weekStart) => {
+    e.preventDefault();
+    if (!dragSession) return;
+    const newDate = format(weekStart, 'yyyy-MM-dd');
+    setDragOverWeek(null);
+    // Open edit dialog with new date pre-filled
+    setPreSaisie({ ...dragSession, date: newDate, formateur_ids: dragSession.formateur_ids || [] });
+    setShowPreSaisie(true);
+    setDragSession(null);
+  };
+
+  const handleDragEnd = () => { setDragSession(null); setDragOverWeek(null); };
+
+  // Zoom sizes
+  const baseFontUe = 10 * zoom;
+  const baseFontCell = 7 * zoom;
+  const colLeft = Math.round(140 * zoom);
+  const colHours = Math.round(80 * zoom);
+  const cellMinH = Math.round(24 * zoom);
+  const minWidth = Math.round(1000 * zoom);
 
   return (
     <div className="space-y-3" data-testid="planning-macro">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Planning macro</h1>
         <div className="flex gap-2 items-center">
+          <Button variant="outline" size="sm" onClick={() => setZoom(z => Math.max(0.6, z - 0.1))} data-testid="zoom-out"><ZoomOut size={16} /></Button>
+          <span className="text-xs font-medium w-12 text-center">{Math.round(zoom * 100)}%</span>
+          <Button variant="outline" size="sm" onClick={() => setZoom(z => Math.min(1.8, z + 0.1))} data-testid="zoom-in"><ZoomIn size={16} /></Button>
+          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
           <Button variant="outline" size="sm" onClick={() => setStartYear(y => y - 1)}><ChevronLeft size={16} /></Button>
           <span className="text-sm font-semibold">{startYear}-{startYear + 1}</span>
           <Button variant="outline" size="sm" onClick={() => setStartYear(y => y + 1)}><ChevronRight size={16} /></Button>
@@ -151,21 +191,32 @@ export default function PlanningMacro() {
             {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterDomain} onValueChange={setFilterDomain}>
-          <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Domaine" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous domaines</SelectItem>
-            {domains.map(d => <SelectItem key={d.id} value={d.id}>{d.nom}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      </div>
+
+      {/* Domain selector */}
+      <div className="flex flex-wrap gap-1 items-center">
+        <span className="text-[10px] text-slate-500 font-medium mr-1">Domaines :</span>
+        <button onClick={() => setSelectedDomains(new Set())}
+          className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors
+            ${selectedDomains.size === 0 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
+          data-testid="domain-all">Tous</button>
+        {domains.map(d => (
+          <button key={d.id} onClick={() => toggleDomain(d.id)}
+            className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors
+              ${selectedDomains.has(d.id) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
+            data-testid={`domain-${d.id}`}>
+            {d.nom.length > 12 ? d.nom.slice(0, 12) + '...' : d.nom}
+          </button>
+        ))}
       </div>
 
       {/* Month selector */}
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1 items-center">
+        <span className="text-[10px] text-slate-500 font-medium mr-1">Mois :</span>
         {[8,9,10,11,0,1,2,3,4,5,6,7].map(m => (
           <button key={m} onClick={() => toggleMonth(m)}
-            className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors
-              ${selectedMonths.includes(m) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+            className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors
+              ${selectedMonths.includes(m) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
             data-testid={`month-toggle-${m}`}>
             {MONTH_NAMES[m].slice(0, 4)}
           </button>
@@ -174,21 +225,21 @@ export default function PlanningMacro() {
 
       {/* Timeline */}
       <Card className="overflow-x-auto">
-        <div className="p-0 min-w-[1000px]">
+        <div className="p-0" style={{ minWidth: minWidth }}>
           {/* Month headers */}
           <div className="flex border-b border-slate-200 dark:border-slate-700">
-            <div className="w-36 flex-shrink-0 p-1.5 border-r bg-slate-50 dark:bg-slate-800/50 text-[10px] font-semibold">UE / Domaine</div>
-            <div className="w-20 flex-shrink-0 p-1.5 border-r bg-slate-50 dark:bg-slate-800/50 text-[10px] font-semibold text-center">Heures</div>
+            <div className="flex-shrink-0 p-1.5 border-r bg-slate-50 dark:bg-slate-800/50 font-semibold" style={{ width: colLeft, fontSize: baseFontUe }}>UE / Domaine</div>
+            <div className="flex-shrink-0 p-1.5 border-r bg-slate-50 dark:bg-slate-800/50 font-semibold text-center" style={{ width: colHours, fontSize: baseFontUe }}>Heures</div>
             {months.map((m, i) => {
               const weeks = getWeeksForMonth(m);
               return (
                 <div key={i} className="flex-1 border-r border-slate-200 dark:border-slate-700 min-w-0">
-                  <div className="text-center py-1 bg-slate-50 dark:bg-slate-800/50 text-[10px] font-semibold capitalize border-b">
+                  <div className="text-center py-1 bg-slate-50 dark:bg-slate-800/50 font-semibold capitalize border-b" style={{ fontSize: baseFontUe }}>
                     {format(m, 'MMM yyyy', { locale: fr })}
                   </div>
                   <div className="flex">
                     {weeks.map((w, wi) => (
-                      <div key={wi} className="flex-1 text-center py-0.5 text-[9px] text-slate-400 border-r border-slate-100 dark:border-slate-800">
+                      <div key={wi} className="flex-1 text-center py-0.5 text-slate-400 border-r border-slate-100 dark:border-slate-800" style={{ fontSize: baseFontCell + 1 }}>
                         S{getWeek(w, { weekStartsOn: 1 })}
                       </div>
                     ))}
@@ -198,47 +249,55 @@ export default function PlanningMacro() {
             })}
           </div>
 
-          {/* Rows */}
-          {domains.map(dom => {
+          {/* Rows by domain */}
+          {visibleDomains.map(dom => {
             const domUes = ues.filter(u => u.domain_id === dom.id);
             if (domUes.length === 0) return null;
             return (
               <div key={dom.id}>
                 <div className="flex border-b bg-slate-50 dark:bg-slate-800/30">
-                  <div className="w-36 flex-shrink-0 p-1 border-r text-[10px] font-semibold text-slate-700 dark:text-slate-300 truncate">{dom.nom}</div>
-                  <div className="w-20 flex-shrink-0 border-r" />
+                  <div className="flex-shrink-0 p-1 border-r font-semibold text-slate-700 dark:text-slate-300 truncate" style={{ width: colLeft, fontSize: baseFontUe }}>{dom.nom}</div>
+                  <div className="flex-shrink-0 border-r" style={{ width: colHours }} />
                   <div className="flex-1" />
                 </div>
                 {domUes.map(ue => {
                   const ueHours = hoursByUe[ue.id] || {};
-                  const hoursSummary = Object.entries(ueHours).map(([t, h]) => `${t}:${h.toFixed(0)}h`).join(' ');
                   return (
                     <div key={ue.id} className="flex border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
-                      <div className="w-36 flex-shrink-0 p-1 border-r text-[10px] text-slate-600 dark:text-slate-400 truncate pl-3" title={`${ue.code_ue} - ${ue.intitule}`}>
+                      <div className="flex-shrink-0 p-1 border-r text-slate-600 dark:text-slate-400 truncate pl-3" style={{ width: colLeft, fontSize: baseFontUe - 1 }}
+                        title={`${ue.code_ue} - ${ue.intitule}`}>
                         {ue.code_ue} - {ue.intitule}
                       </div>
-                      {/* Hours column */}
-                      <div className="w-20 flex-shrink-0 p-0.5 border-r text-[8px] text-slate-500 leading-tight">
+                      <div className="flex-shrink-0 p-0.5 border-r text-slate-500 leading-tight" style={{ width: colHours, fontSize: baseFontCell + 1 }}>
                         {Object.entries(ueHours).map(([t, h]) => (
-                          <div key={t}><span className="font-medium">{t}</span>: {h.toFixed(0)}h</div>
+                          <div key={t}><span className="font-medium">{t}</span>:{h.toFixed(0)}h</div>
                         ))}
                       </div>
-                      {/* Weeks */}
                       {months.map((m, mi) => {
                         const weeks = getWeeksForMonth(m);
                         return (
                           <div key={mi} className="flex-1 flex border-r border-slate-100 dark:border-slate-800 min-w-0">
                             {weeks.map((w, wi) => {
                               const weekSess = getSessionsForWeek(w).filter(s => s.ue_id === ue.id);
+                              const weekKey = format(w, 'yyyy-MM-dd');
+                              const isDropTarget = dragOverWeek === weekKey && dragSession?.ue_id === ue.id;
                               return (
-                                <div key={wi} className="flex-1 p-0.5 border-r border-slate-50 dark:border-slate-800/50 min-h-[24px] cursor-pointer relative"
-                                  onClick={() => isAdmin && startPreSaisie(w, ue.id)}>
+                                <div key={wi}
+                                  className={`flex-1 p-0.5 border-r border-slate-50 dark:border-slate-800/50 cursor-pointer relative transition-colors
+                                    ${isDropTarget ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}
+                                  style={{ minHeight: cellMinH }}
+                                  onClick={() => isAdmin && startPreSaisie(w, ue.id)}
+                                  onDragOver={(e) => handleDragOver(e, w)}
+                                  onDrop={(e) => handleDrop(e, w)}>
                                   {weekSess.map(s => {
                                     const at = atMap[s.type_activite_id] || {};
                                     return (
                                       <div key={s.id}
-                                        className="text-[7px] px-0.5 py-0.5 rounded mb-0.5 cursor-pointer truncate"
-                                        style={{ backgroundColor: (at.couleur || '#94a3b8') + '30', borderLeft: `2px solid ${at.couleur || '#94a3b8'}` }}
+                                        draggable={isAdmin}
+                                        onDragStart={(e) => handleDragStart(e, s)}
+                                        onDragEnd={handleDragEnd}
+                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-grab active:cursor-grabbing truncate"
+                                        style={{ fontSize: baseFontCell, backgroundColor: (at.couleur || '#94a3b8') + '30', borderLeft: `2px solid ${at.couleur || '#94a3b8'}` }}
                                         onClick={(e) => { e.stopPropagation(); isAdmin && editPreSaisie(s); }}
                                         onMouseEnter={(e) => handleHover(e, s)}
                                         onMouseLeave={() => setHoveredItem(null)}>
@@ -261,8 +320,8 @@ export default function PlanningMacro() {
         </div>
       </Card>
 
-      {/* Hover tooltip - positioned near cursor */}
-      {hoveredItem && !showPreSaisie && (
+      {/* Hover tooltip */}
+      {hoveredItem && !showPreSaisie && !dragSession && (
         <div className="fixed z-[100] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl p-3 w-64 pointer-events-none tooltip-enter"
           style={{ left: hoverPos.x, top: hoverPos.y }}>
           <div className="flex items-center gap-2 mb-1.5 pb-1.5 border-b border-slate-200 dark:border-slate-700">
@@ -281,10 +340,17 @@ export default function PlanningMacro() {
         </div>
       )}
 
+      {/* Drag indicator */}
+      {dragSession && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium">
+          Deplacez vers une autre semaine puis validez
+        </div>
+      )}
+
       {/* Pre-saisie Dialog */}
       <Dialog open={showPreSaisie} onOpenChange={setShowPreSaisie}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{preSaisie?.id ? 'Modifier' : 'Pre-saisie de cours'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{preSaisie?.id ? 'Modifier la seance' : 'Pre-saisie de cours'}</DialogTitle></DialogHeader>
           {preSaisie && (
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Date</Label><Input type="date" className="h-8 text-sm" value={preSaisie.date || ''} onChange={e => setPreSaisie({ ...preSaisie, date: e.target.value })} /></div>
@@ -319,9 +385,17 @@ export default function PlanningMacro() {
               </div>
               <div><Label className="text-xs">Heure debut (optionnel)</Label><Input type="time" className="h-8 text-sm" value={preSaisie.heure_debut || ''} onChange={e => setPreSaisie({ ...preSaisie, heure_debut: e.target.value })} /></div>
               <div><Label className="text-xs">Heure fin (optionnel)</Label><Input type="time" className="h-8 text-sm" value={preSaisie.heure_fin || ''} onChange={e => setPreSaisie({ ...preSaisie, heure_fin: e.target.value })} /></div>
-              <div className="col-span-2 flex justify-end gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={() => setShowPreSaisie(false)}>Annuler</Button>
-                <Button size="sm" onClick={savePreSaisie} data-testid="save-presaisie">Enregistrer</Button>
+              <div className="col-span-2 flex justify-between pt-2 border-t">
+                {preSaisie.id && (
+                  <Button variant="destructive" size="sm" className="text-xs" onClick={async () => {
+                    if (!window.confirm('Supprimer ?')) return;
+                    try { await API.delete(`/sessions/${preSaisie.id}`); setShowPreSaisie(false); loadData(); } catch {}
+                  }}>Supprimer</Button>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowPreSaisie(false)}>Annuler</Button>
+                  <Button size="sm" className="text-xs" onClick={savePreSaisie} data-testid="save-presaisie">Enregistrer</Button>
+                </div>
               </div>
             </div>
           )}
