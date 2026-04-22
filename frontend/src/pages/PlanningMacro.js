@@ -21,7 +21,7 @@ export default function PlanningMacro() {
   const [ues, setUes] = useState([]);
   const [domains, setDomains] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
-  const [filterPromo, setFilterPromo] = useState('all');
+  const [selectedPromos, setSelectedPromos] = useState(new Set());
   const [filterSemestre, setFilterSemestre] = useState('all');
   const [selectedDomains, setSelectedDomains] = useState(new Set());
   const [startYear, setStartYear] = useState(new Date().getFullYear());
@@ -41,7 +41,7 @@ export default function PlanningMacro() {
     const dateDebut = format(startOfMonth(months[0]), 'yyyy-MM-dd');
     const dateFin = format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd');
     const params = { date_debut: dateDebut, date_fin: dateFin };
-    if (filterPromo !== 'all') params.promotion_id = filterPromo;
+    if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
       const [sessRes, prRes, atRes, ueRes, domRes, syRes] = await Promise.all([
@@ -51,7 +51,7 @@ export default function PlanningMacro() {
       setSessions(sessRes.data); setPromotions(prRes.data); setActTypes(atRes.data);
       setUes(ueRes.data); setDomains(domRes.data); setSchoolYears(syRes.data);
     } catch (e) { console.error(e); }
-  }, [startYear, selectedMonths, filterPromo, filterSemestre]);
+  }, [startYear, selectedMonths, selectedPromos, filterSemestre]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -78,6 +78,12 @@ export default function PlanningMacro() {
     setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m].sort((a, b) => {
       const oa = a >= 8 ? a - 8 : a + 4; const ob = b >= 8 ? b - 8 : b + 4; return oa - ob;
     }));
+  };
+
+  const togglePromo = (pid) => {
+    const next = new Set(selectedPromos);
+    if (next.has(pid)) next.delete(pid); else next.add(pid);
+    setSelectedPromos(next);
   };
 
   const toggleDomain = (did) => {
@@ -175,13 +181,20 @@ export default function PlanningMacro() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
-        <Select value={filterPromo} onValueChange={setFilterPromo}>
-          <SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="Promotion" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes promotions</SelectItem>
-            {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <span className="text-[10px] text-slate-500 font-medium">Promos :</span>
+        <button onClick={() => setSelectedPromos(new Set())}
+          className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors
+            ${selectedPromos.size === 0 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
+          data-testid="macro-promo-all">Toutes</button>
+        {promotions.map(p => (
+          <button key={p.id} onClick={() => togglePromo(p.id)}
+            className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors
+              ${selectedPromos.has(p.id) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
+            data-testid={`macro-promo-${p.id}`}>
+            {p.nom.replace('Promotion ', '')}
+          </button>
+        ))}
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
         <Select value={filterSemestre} onValueChange={setFilterSemestre}>
           <SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
