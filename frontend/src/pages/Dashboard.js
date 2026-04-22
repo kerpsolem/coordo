@@ -10,7 +10,18 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [period, setPeriod] = useState('semaine');
   const [weekNum, setWeekNum] = useState(getWeek(new Date(), { weekStartsOn: 1 }));
+  const [filterPromo, setFilterPromo] = useState('all');
+  const [filterSemestre, setFilterSemestre] = useState('all');
+  const [filterAnneeSco, setFilterAnneeSco] = useState('all');
+  const [promotions, setPromotions] = useState([]);
+  const [schoolYears, setSchoolYears] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([API.get('/promotions'), API.get('/school-years')]).then(([p, sy]) => {
+      setPromotions(p.data); setSchoolYears(sy.data);
+    }).catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -34,12 +45,24 @@ export default function Dashboard() {
       dateFin = format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
     }
 
+    const params = { date_debut: dateDebut, date_fin: dateFin };
+    if (filterSemestre !== 'all') params.semestre = filterSemestre;
+
     try {
-      const { data: d } = await API.get('/dashboard', { params: { date_debut: dateDebut, date_fin: dateFin } });
+      const { data: d } = await API.get('/dashboard', { params });
+      // Client-side filter by promotion
+      if (filterPromo !== 'all' && d.heures_par_promotion) {
+        const promoName = promotions.find(p => p.id === filterPromo)?.nom;
+        if (promoName) {
+          const filtered = {};
+          if (d.heures_par_promotion[promoName] !== undefined) filtered[promoName] = d.heures_par_promotion[promoName];
+          d.heures_par_promotion = filtered;
+        }
+      }
       setData(d);
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [period, weekNum]);
+  }, [period, weekNum, filterPromo, filterSemestre, filterAnneeSco, promotions]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -79,6 +102,33 @@ export default function Dashboard() {
             </Select>
           )}
         </div>
+      </div>
+
+      {/* Filters row */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <Select value={filterPromo} onValueChange={setFilterPromo}>
+          <SelectTrigger className="w-48 h-8 text-xs" data-testid="dashboard-filter-promo"><SelectValue placeholder="Promotion" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes promotions</SelectItem>
+            {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
+          <SelectTrigger className="w-40 h-8 text-xs" data-testid="dashboard-filter-annee"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes annees</SelectItem>
+            {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterSemestre} onValueChange={setFilterSemestre}>
+          <SelectTrigger className="w-40 h-8 text-xs" data-testid="dashboard-filter-semestre"><SelectValue placeholder="Semestre" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous semestres</SelectItem>
+            <SelectItem value="pair">Pairs (S2,S4,S6)</SelectItem>
+            <SelectItem value="impair">Impairs (S1,S3,S5)</SelectItem>
+            {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Saint + Citation */}
