@@ -374,25 +374,32 @@ async def toggle_session_field(id: str, request: Request):
 
 # ===================== ABSENCES =====================
 @api_router.get("/absences")
-async def list_absences(formateur_id: Optional[str] = None, active: Optional[str] = None):
+async def list_absences(formateur_id: Optional[str] = None, status: Optional[str] = None):
     q = {}
     if formateur_id:
         q["formateur_id"] = formateur_id
-    if active == "true":
-        today = date.today().isoformat()
+    today = date.today().isoformat()
+    if status == "en_cours":
+        q["archived"] = {"$ne": True}
         q["$or"] = [
             {"date_fin": {"$gte": today}},
-            {"date_fin_recurrence": {"$gte": today}},
             {"recurrence": True, "date_fin_recurrence": {"$gte": today}}
         ]
-    elif active == "archive":
-        today = date.today().isoformat()
-        q["date_fin"] = {"$lt": today}
+    elif status == "passees":
+        q["archived"] = {"$ne": True}
         q["$or"] = [
-            {"recurrence": {"$ne": True}},
+            {"recurrence": {"$ne": True}, "date_fin": {"$lt": today}},
             {"recurrence": True, "date_fin_recurrence": {"$lt": today}}
         ]
+    elif status == "archivees":
+        q["archived"] = True
     return await crud_list("absences", q, sort=[("date_debut", -1)])
+
+@api_router.patch("/absences/{id}/archive")
+async def archive_absence(id: str, request: Request):
+    await require_admin(request)
+    b = await request.json()
+    return await crud_update("absences", id, {"archived": b.get("archived", True)})
 
 @api_router.post("/absences")
 async def create_absence(request: Request):

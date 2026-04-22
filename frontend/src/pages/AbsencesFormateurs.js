@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import API from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -9,22 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Edit2, Trash2, Archive, RefreshCw } from 'lucide-react';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { Plus, Edit2, Trash2, Archive, ArchiveRestore, RefreshCw, Clock, CalendarOff } from 'lucide-react';
 
 export default function AbsencesFormateurs() {
   const { isAdmin } = useAuth();
   const [absences, setAbsences] = useState([]);
   const [formateurs, setFormateurs] = useState([]);
-  const [view, setView] = useState('active');
+  const [view, setView] = useState('en_cours');
   const [editItem, setEditItem] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const [absRes, fmRes] = await Promise.all([
-        API.get('/absences', { params: { active: view === 'active' ? 'true' : view === 'archive' ? 'archive' : undefined } }),
+        API.get('/absences', { params: { status: view } }),
         API.get('/formateurs')
       ]);
       setAbsences(absRes.data);
@@ -36,6 +34,7 @@ export default function AbsencesFormateurs() {
 
   const fmMap = Object.fromEntries(formateurs.map(f => [f.id, f]));
   const JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+  const today = new Date().toISOString().split('T')[0];
 
   const startEdit = (item) => {
     setEditItem({ ...item, jours_recurrence: item.jours_recurrence || [] });
@@ -45,7 +44,7 @@ export default function AbsencesFormateurs() {
   const startNew = () => {
     setEditItem({
       formateur_id: '', date_debut: '', date_fin: '', journee_entiere: true,
-      recurrence: false, type_recurrence: '', jours_recurrence: [], date_fin_recurrence: ''
+      recurrence: false, type_recurrence: '', jours_recurrence: [], date_fin_recurrence: '', archived: false
     });
     setShowDialog(true);
   };
@@ -64,16 +63,40 @@ export default function AbsencesFormateurs() {
     try { await API.delete(`/absences/${id}`); load(); } catch (e) { console.error(e); }
   };
 
+  const toggleArchive = async (id, archived) => {
+    try {
+      await API.patch(`/absences/${id}/archive`, { archived });
+      load();
+    } catch (e) { console.error(e); }
+  };
+
+  const isExpired = (ab) => {
+    if (ab.recurrence && ab.date_fin_recurrence) return ab.date_fin_recurrence < today;
+    return (ab.date_fin || '') < today;
+  };
+
+  const viewLabels = {
+    en_cours: { label: 'En cours', icon: Clock, desc: 'Absences actives ou recurrentes en cours' },
+    passees: { label: 'Passees', icon: CalendarOff, desc: 'Absences dont la date est depassee' },
+    archivees: { label: 'Archivees', icon: Archive, desc: 'Absences archivees manuellement' }
+  };
+
   return (
     <div className="space-y-4" data-testid="absences-formateurs">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Absences formateurs</h1>
         <div className="flex gap-2">
-          <Button variant={view === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setView('active')} data-testid="view-active">Actives</Button>
-          <Button variant={view === 'archive' ? 'default' : 'outline'} size="sm" onClick={() => setView('archive')} data-testid="view-archive"><Archive size={14} className="mr-1" />Archives</Button>
-          {isAdmin && <Button size="sm" onClick={startNew} data-testid="new-absence"><Plus size={14} className="mr-1" />Nouvelle absence</Button>}
+          {Object.entries(viewLabels).map(([key, { label, icon: Icon }]) => (
+            <Button key={key} variant={view === key ? 'default' : 'outline'} size="sm" className="h-8 text-xs"
+              onClick={() => setView(key)} data-testid={`view-${key}`}>
+              <Icon size={14} className="mr-1" />{label}
+            </Button>
+          ))}
+          {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={startNew} data-testid="new-absence"><Plus size={14} className="mr-1" />Nouvelle</Button>}
         </div>
       </div>
+
+      <p className="text-xs text-slate-500">{viewLabels[view]?.desc}</p>
 
       <Card>
         <CardContent className="p-0">
@@ -87,14 +110,16 @@ export default function AbsencesFormateurs() {
                 <TableHead className="text-xs">Recurrence</TableHead>
                 <TableHead className="text-xs">Jours</TableHead>
                 <TableHead className="text-xs">Fin recurrence</TableHead>
+                <TableHead className="text-xs">Statut</TableHead>
                 {isAdmin && <TableHead className="text-xs">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {absences.map(ab => {
                 const fm = fmMap[ab.formateur_id];
+                const expired = isExpired(ab);
                 return (
-                  <TableRow key={ab.id} className="text-sm">
+                  <TableRow key={ab.id} className={`text-sm ${expired && view === 'en_cours' ? 'opacity-50' : ''}`}>
                     <TableCell className="py-2">
                       <span className="font-bold mr-2">{fm?.initiales}</span>
                       {fm?.prenom} {fm?.nom}
@@ -109,13 +134,31 @@ export default function AbsencesFormateurs() {
                         </span>
                       ) : 'Non'}
                     </TableCell>
-                    <TableCell className="py-2 text-xs">{(ab.jours_recurrence || []).join(', ')}</TableCell>
+                    <TableCell className="py-2 text-xs capitalize">{(ab.jours_recurrence || []).join(', ')}</TableCell>
                     <TableCell className="py-2">{ab.date_fin_recurrence || '-'}</TableCell>
+                    <TableCell className="py-2">
+                      {ab.archived ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500">Archivee</span>
+                      ) : expired ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600">Passee</span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-100 dark:bg-green-900/30 text-green-600">En cours</span>
+                      )}
+                    </TableCell>
                     {isAdmin && (
                       <TableCell className="py-2">
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => startEdit(ab)}><Edit2 size={12} /></Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => del(ab.id)}><Trash2 size={12} /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => startEdit(ab)} title="Modifier"><Edit2 size={12} /></Button>
+                          {!ab.archived ? (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-amber-500" onClick={() => toggleArchive(ab.id, true)} title="Archiver">
+                              <Archive size={12} />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-500" onClick={() => toggleArchive(ab.id, false)} title="Desarchiver">
+                              <ArchiveRestore size={12} />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => del(ab.id)} title="Supprimer"><Trash2 size={12} /></Button>
                         </div>
                       </TableCell>
                     )}
@@ -124,7 +167,7 @@ export default function AbsencesFormateurs() {
               })}
             </TableBody>
           </Table>
-          {absences.length === 0 && <p className="text-center py-8 text-sm text-slate-500">Aucune absence</p>}
+          {absences.length === 0 && <p className="text-center py-8 text-sm text-slate-500">Aucune absence dans cette categorie</p>}
         </CardContent>
       </Card>
 
