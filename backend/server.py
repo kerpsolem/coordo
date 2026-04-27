@@ -810,7 +810,7 @@ async def create_sessions_bulk(request: Request):
     exclude_holidays = b.get("exclude_holidays", True)
     holidays = _holidays_set(d_start.year, d_end.year) if exclude_holidays else set()
 
-    if journee_entiere or mode == "stage":
+    if mode == "stage" and not journee_entiere:
         b.setdefault("heure_debut", "08:30")
         b.setdefault("heure_fin", "16:30")
 
@@ -820,7 +820,7 @@ async def create_sessions_bulk(request: Request):
         if ue:
             b["domain_id"] = ue.get("domain_id", "")
 
-    # Per-day duration
+    # Per-day duration (used when not journee_entiere)
     duree_jour = 0
     if b.get("heure_debut") and b.get("heure_fin"):
         try:
@@ -829,15 +829,13 @@ async def create_sessions_bulk(request: Request):
             duree_jour = round((hf - hd).total_seconds() / 3600, 2)
         except:
             duree_jour = 0
-    if journee_entiere:
-        duree_jour = 7  # 8h30-16h30 with 1h pause
 
     # Build daily list
     created = []
     excluded = []
     cur = d_start
     base = {k: v for k, v in b.items() if k not in ["date_debut", "date_fin", "mode", "exclude_holidays", "journee_entiere", "id"]}
-    base["journee_entiere"] = journee_entiere
+    base["journee_entiere"] = False  # individual sessions are half-days
     if mode == "stage":
         base["type_marker"] = "stage"
 
@@ -848,14 +846,26 @@ async def create_sessions_bulk(request: Request):
             if iso in holidays:
                 excluded.append(iso)
             else:
-                # Stage: cap weekly to 35h
-                doc = dict(base)
-                doc["date"] = iso
-                doc["duree"] = duree_jour
-                doc["id"] = str(uuid.uuid4())
-                doc["created_at"] = datetime.now(timezone.utc).isoformat()
-                await db.sessions.insert_one(doc)
-                created.append({k: v for k, v in doc.items() if k != "_id"})
+                if journee_entiere:
+                    # 2 sessions per day: matin (8h30-12h, 3.5h) + apres-midi (13h-16h30, 3.5h)
+                    for slot in [("08:30", "12:00", 3.5), ("13:00", "16:30", 3.5)]:
+                        doc = dict(base)
+                        doc["date"] = iso
+                        doc["heure_debut"] = slot[0]
+                        doc["heure_fin"] = slot[1]
+                        doc["duree"] = slot[2]
+                        doc["id"] = str(uuid.uuid4())
+                        doc["created_at"] = datetime.now(timezone.utc).isoformat()
+                        await db.sessions.insert_one(doc)
+                        created.append({k: v for k, v in doc.items() if k != "_id"})
+                else:
+                    doc = dict(base)
+                    doc["date"] = iso
+                    doc["duree"] = duree_jour
+                    doc["id"] = str(uuid.uuid4())
+                    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+                    await db.sessions.insert_one(doc)
+                    created.append({k: v for k, v in doc.items() if k != "_id"})
         cur += timedelta(days=1)
 
     # Stage: enforce 35h/week max (trim duration if needed)

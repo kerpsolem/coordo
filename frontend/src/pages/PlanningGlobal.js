@@ -113,7 +113,19 @@ export default function PlanningGlobal() {
   const saveSession = async () => {
     try {
       if (editSession.id) {
-        await API.put(`/sessions/${editSession.id}`, editSession);
+        // Editing existing session
+        if (editSession.journee_entiere) {
+          // Split into matin + apres-midi: update existing as matin, create afternoon copy
+          const matin = { ...editSession, heure_debut: '08:30', heure_fin: '12:00', duree: 3.5, journee_entiere: false };
+          delete matin.date_fin_periode;
+          await API.put(`/sessions/${editSession.id}`, matin);
+          const apres = { ...editSession };
+          delete apres.id; delete apres.date_fin_periode;
+          apres.heure_debut = '13:00'; apres.heure_fin = '16:30'; apres.duree = 3.5; apres.journee_entiere = false;
+          await API.post('/sessions', apres);
+        } else {
+          await API.put(`/sessions/${editSession.id}`, editSession);
+        }
       } else if (editSession.date_fin_periode && editSession.date_fin_periode > editSession.date) {
         // Multi-day creation -> bulk
         const at = atMap[editSession.type_activite_id] || {};
@@ -126,7 +138,11 @@ export default function PlanningGlobal() {
           exclude_holidays: true,
         });
       } else if (editSession.journee_entiere) {
-        await API.post('/sessions', { ...editSession, heure_debut: '08:30', heure_fin: '16:30', duree: 7 });
+        // Single day "Journee entiere" -> create 2 sessions: matin (8h30-12h) + apres-midi (13h-16h30)
+        const base = { ...editSession, journee_entiere: false };
+        delete base.date_fin_periode;
+        await API.post('/sessions', { ...base, heure_debut: '08:30', heure_fin: '12:00', duree: 3.5 });
+        await API.post('/sessions', { ...base, heure_debut: '13:00', heure_fin: '16:30', duree: 3.5 });
       } else {
         await API.post('/sessions', editSession);
       }
@@ -502,8 +518,8 @@ export default function PlanningGlobal() {
               {!editSession.id && <div><Label className="text-xs">Intitule</Label><Input value={editSession.intitule||''} onChange={e=>setEditSession({...editSession,intitule:e.target.value})} className="h-8 text-sm" /></div>}
               <div className="col-span-2 flex items-center gap-2">
                 <label className="flex items-center gap-2 text-xs">
-                  <Checkbox checked={editSession.journee_entiere||false} onCheckedChange={v=>setEditSession({...editSession, journee_entiere: v, heure_debut: v ? '08:30' : (editSession.heure_debut||'08:00'), heure_fin: v ? '16:30' : (editSession.heure_fin||'10:00')})} data-testid="session-journee-entiere" />
-                  Journee entiere (8h30-16h30, 7h)
+                  <Checkbox checked={editSession.journee_entiere||false} onCheckedChange={v=>setEditSession({...editSession, journee_entiere: v, heure_debut: v ? '08:30' : (editSession.heure_debut||'08:00'), heure_fin: v ? '12:00' : (editSession.heure_fin||'10:00')})} data-testid="session-journee-entiere" />
+                  Journee entiere (2 seances : 8h30-12h + 13h-16h30 = 7h)
                 </label>
                 {editSession.date_fin_periode && editSession.date && editSession.date_fin_periode > editSession.date && (
                   <span className="text-[11px] px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700">Multi-jours</span>
