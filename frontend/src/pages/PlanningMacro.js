@@ -397,16 +397,19 @@ export default function PlanningMacro() {
                                         draggable={isAdmin}
                                         onDragStart={(e) => handleDragStart(e, s)}
                                         onDragEnd={handleDragEnd}
-                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-grab active:cursor-grabbing truncate group relative"
+                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-pointer truncate group relative"
                                         style={{ fontSize: baseFontCell, backgroundColor: (at.couleur || '#94a3b8') + '30', borderLeft: `2px solid ${at.couleur || '#94a3b8'}` }}
-                                        onClick={(e) => { e.stopPropagation(); isAdmin && editPreSaisie(s); }}
+                                        onMouseDown={() => setHoveredItem(null)}
+                                        onClick={(e) => { e.stopPropagation(); setHoveredItem(null); if (isAdmin) editPreSaisie(s); }}
                                         onMouseEnter={(e) => handleHover(e, s)}
                                         onMouseLeave={() => setHoveredItem(null)}>
                                         <span>{at.nom}</span>
                                         {isAdmin && (
-                                          <button title="Dupliquer" className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 bg-white/90 dark:bg-slate-800 rounded p-0.5 shadow"
+                                          <button type="button" title="Dupliquer"
+                                            className="absolute right-0.5 -top-2 opacity-0 group-hover:opacity-100 bg-violet-600 text-white rounded-full p-0.5 shadow-md transition-opacity"
+                                            onMouseDown={(e) => e.stopPropagation()}
                                             onClick={(e) => duplicateSession(s.id, e)} data-testid={`dup-${s.id}`}>
-                                            <Copy size={baseFontCell + 1} className="text-slate-600" />
+                                            <Copy size={baseFontCell + 1} />
                                           </button>
                                         )}
                                       </div>
