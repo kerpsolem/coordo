@@ -453,20 +453,37 @@ async def absences_for_period(date_debut: str, date_fin: str):
             rec_end = date.fromisoformat(rec_end_str)
             day_map = {"lundi": 0, "mardi": 1, "mercredi": 2, "jeudi": 3, "vendredi": 4, "samedi": 5, "dimanche": 6}
             jours = [day_map.get(j.lower(), -1) for j in ab.get("jours_recurrence", [])]
+            type_rec = (ab.get("type_recurrence") or "hebdomadaire").lower()
+            step_weeks = 2 if type_rec in ("bimensuelle", "bi-mensuelle", "bimensuel", "bi_mensuelle") else 1
             current = d_start
             while current <= min(d_end, rec_end):
                 if current.weekday() in jours and current >= ab_start:
-                    result.append({
-                        "formateur_id": ab.get("formateur_id"),
-                        "formateur_nom": f.get("nom", ""),
-                        "formateur_prenom": f.get("prenom", ""),
-                        "formateur_initiales": f.get("initiales", ""),
-                        "date": current.isoformat(),
-                        "journee_entiere": ab.get("journee_entiere", True),
-                        "periode": ab.get("periode") or ("journee" if ab.get("journee_entiere", True) else "matin"),
-                        "recurrence": True,
-                        "absence_id": ab.get("id")
-                    })
+                    # For bi-weekly: include only if (current - ab_start).days // 7 is even
+                    if step_weeks == 1:
+                        ok = True
+                    else:
+                        # Anchor on the first matching weekday at/after ab_start
+                        anchor = ab_start
+                        # advance anchor to first jours weekday
+                        for _ in range(7):
+                            if anchor.weekday() in jours:
+                                break
+                            anchor = anchor + timedelta(days=1)
+                        weeks_diff = (current - anchor).days // 7
+                        ok = weeks_diff >= 0 and (weeks_diff % step_weeks == 0)
+                    if ok:
+                        result.append({
+                            "formateur_id": ab.get("formateur_id"),
+                            "formateur_nom": f.get("nom", ""),
+                            "formateur_prenom": f.get("prenom", ""),
+                            "formateur_initiales": f.get("initiales", ""),
+                            "date": current.isoformat(),
+                            "journee_entiere": ab.get("journee_entiere", True),
+                            "periode": ab.get("periode") or ("journee" if ab.get("journee_entiere", True) else "matin"),
+                            "recurrence": True,
+                            "type_recurrence": type_rec,
+                            "absence_id": ab.get("id")
+                        })
                 current += timedelta(days=1)
         else:
             overlap_start = max(d_start, ab_start)
@@ -1170,7 +1187,7 @@ QUOTES = [
 @api_router.get("/dashboard")
 async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = None,
                     semestre: Optional[str] = None, annee_scolaire_id: Optional[str] = None,
-                    promotion_id: Optional[str] = None):
+                    promotion_id: Optional[str] = None, type_activite_id: Optional[str] = None):
     today = date.today()
     today_key = today.strftime("%m-%d")
     saint = SAINTS.get(today_key, "")
@@ -1196,6 +1213,13 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
         q["promotion_id"] = promotion_id
     if annee_scolaire_id:
         q["annee_scolaire_id"] = annee_scolaire_id
+    if type_activite_id:
+        # accept comma-separated list for multi-type filter (e.g. all 'Cours' types)
+        ids = [t for t in type_activite_id.split(",") if t]
+        if len(ids) == 1:
+            q["type_activite_id"] = ids[0]
+        elif len(ids) > 1:
+            q["type_activite_id"] = {"$in": ids}
 
     sessions = await db.sessions.find(q, {"_id": 0}).to_list(2000)
     promotions = {p["id"]: p for p in await crud_list("promotions")}

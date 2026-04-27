@@ -58,8 +58,10 @@ export default function Dashboard() {
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     if (filterPromo !== 'all') params.promotion_id = filterPromo;
     if (coursOnly) {
-      const cours = actTypes.find(a => (a.nom || '').toLowerCase().startsWith('cours'));
-      if (cours) params.type_activite_id = cours.id;
+      // Filter to activity types flagged as "Cours" in Administration > Types d'activite
+      const coursIds = actTypes.filter(a => a.is_cours === true).map(a => a.id);
+      if (coursIds.length) params.type_activite_id = coursIds.join(',');
+      else params.type_activite_id = '__none__'; // force empty result if no type flagged
     }
 
     try {
