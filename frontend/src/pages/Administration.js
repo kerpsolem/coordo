@@ -105,7 +105,14 @@ export default function Administration() {
     if (!window.confirm('Supprimer ?')) return;
     const endpoints = { formateurs: '/formateurs', promotions: '/promotions', groups: '/groups', sites: '/sites',
       actTypes: '/activity-types', domains: '/domains', ues: '/ues', schoolYears: '/school-years', users: '/users' };
-    try { await API.delete(`${endpoints[type]}/${id}`); loadAll(); } catch (e) { console.error(e); }
+    try {
+      await API.delete(`${endpoints[type]}/${id}`);
+      loadAll();
+    } catch (e) {
+      console.error('Delete failed:', e);
+      const detail = e.response?.data?.detail || e.message || 'Erreur inconnue';
+      alert(`Suppression impossible : ${detail}`);
+    }
   };
 
   const handleAcceptRequest = async () => {

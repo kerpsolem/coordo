@@ -92,7 +92,14 @@ export default function CoordinationPlanning() {
 
   const deleteSession = async (id) => {
     if (!window.confirm('Supprimer cette seance ?')) return;
-    try { await API.delete(`/sessions/${id}`); loadData(); } catch (e) { console.error(e); }
+    try {
+      await API.delete(`/sessions/${id}`);
+      loadData();
+    } catch (e) {
+      console.error('Delete failed:', e);
+      const detail = e.response?.data?.detail || e.message || 'Erreur inconnue';
+      alert(`Suppression impossible : ${detail}`);
+    }
   };
 
   const duplicateSession = async (id) => {
