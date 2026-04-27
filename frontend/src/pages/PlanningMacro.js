@@ -397,21 +397,13 @@ export default function PlanningMacro() {
                                         draggable={isAdmin}
                                         onDragStart={(e) => handleDragStart(e, s)}
                                         onDragEnd={handleDragEnd}
-                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-pointer truncate group relative"
+                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-pointer truncate relative"
                                         style={{ fontSize: baseFontCell, backgroundColor: (at.couleur || '#94a3b8') + '30', borderLeft: `2px solid ${at.couleur || '#94a3b8'}` }}
                                         onMouseDown={() => setHoveredItem(null)}
                                         onClick={(e) => { e.stopPropagation(); setHoveredItem(null); if (isAdmin) editPreSaisie(s); }}
                                         onMouseEnter={(e) => handleHover(e, s)}
                                         onMouseLeave={() => setHoveredItem(null)}>
                                         <span>{at.nom}</span>
-                                        {isAdmin && (
-                                          <button type="button" title="Dupliquer"
-                                            className="absolute right-0.5 -top-2 opacity-0 group-hover:opacity-100 bg-violet-600 text-white rounded-full p-0.5 shadow-md transition-opacity"
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                            onClick={(e) => duplicateSession(s.id, e)} data-testid={`dup-${s.id}`}>
-                                            <Copy size={baseFontCell + 1} />
-                                          </button>
-                                        )}
                                       </div>
                                     );
                                   })}
@@ -502,12 +494,22 @@ export default function PlanningMacro() {
               <div><Label className="text-xs">Heure debut (optionnel)</Label><Input type="time" className="h-8 text-sm" value={preSaisie.heure_debut || ''} onChange={e => setPreSaisie({ ...preSaisie, heure_debut: e.target.value })} /></div>
               <div><Label className="text-xs">Heure fin (optionnel)</Label><Input type="time" className="h-8 text-sm" value={preSaisie.heure_fin || ''} onChange={e => setPreSaisie({ ...preSaisie, heure_fin: e.target.value })} /></div>
               <div className="col-span-2 flex justify-between pt-2 border-t">
-                {preSaisie.id && (
-                  <Button variant="destructive" size="sm" className="text-xs" onClick={async () => {
-                    if (!window.confirm('Supprimer ?')) return;
-                    try { await API.delete(`/sessions/${preSaisie.id}`); setShowPreSaisie(false); loadData(); } catch {}
-                  }}>Supprimer</Button>
-                )}
+                <div className="flex gap-2">
+                  {preSaisie.id && (
+                    <>
+                      <Button variant="destructive" size="sm" className="text-xs" onClick={async () => {
+                        if (!window.confirm('Supprimer ?')) return;
+                        try { await API.delete(`/sessions/${preSaisie.id}`); setShowPreSaisie(false); loadData(); } catch {}
+                      }}>Supprimer</Button>
+                      <Button variant="outline" size="sm" className="text-xs" onClick={async () => {
+                        try { await API.post(`/sessions/${preSaisie.id}/duplicate`); setShowPreSaisie(false); loadData(); }
+                        catch (e) { console.error(e); }
+                      }} data-testid="dialog-duplicate">
+                        <Copy size={12} className="mr-1" /> Dupliquer
+                      </Button>
+                    </>
+                  )}
+                </div>
                 <div className="flex gap-2 ml-auto">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowPreSaisie(false)}>Annuler</Button>
                   <Button size="sm" className="text-xs" onClick={savePreSaisie} data-testid="save-presaisie">Enregistrer</Button>
