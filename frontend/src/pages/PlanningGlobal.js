@@ -23,6 +23,7 @@ export default function PlanningGlobal() {
   const { isAdmin } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [absences, setAbsences] = useState([]);
+  const [holidays, setHolidays] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [formateurs, setFormateurs] = useState([]);
   const [actTypes, setActTypes] = useState([]);
@@ -62,12 +63,13 @@ export default function PlanningGlobal() {
     if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
-      const [sessR, absR, proR, fmR, atR, ueR, domR, sitR, grpR] = await Promise.all([
+      const [sessR, absR, holR, proR, fmR, atR, ueR, domR, sitR, grpR] = await Promise.all([
         API.get('/sessions', { params }), API.get('/absences/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
+        API.get('/holidays', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/promotions'), API.get('/formateurs'), API.get('/activity-types'),
         API.get('/ues'), API.get('/domains'), API.get('/sites'), API.get('/groups')
       ]);
-      setSessions(sessR.data); setAbsences(absR.data); setPromotions(proR.data); setFormateurs(fmR.data);
+      setSessions(sessR.data); setAbsences(absR.data); setHolidays(holR.data); setPromotions(proR.data); setFormateurs(fmR.data);
       setActTypes(atR.data); setUes(ueR.data); setDomains(domR.data); setSites(sitR.data); setGroups(grpR.data);
     } catch (e) { console.error(e); }
   }, [currentDate, selectedPromos, filterSemestre]);
@@ -81,20 +83,50 @@ export default function PlanningGlobal() {
   const prevWeek = () => setCurrentDate(d => addWeeks(d, -1));
   const nextWeek = () => setCurrentDate(d => addWeeks(d, 1));
   const displayPromos = selectedPromos.size === 0 ? promotions : promotions.filter(p => selectedPromos.has(p.id));
-  const getAbsForDay = (dayStr) => [...new Set(absences.filter(a => a.date === dayStr).map(a => a.formateur_initiales))];
+  const holidayMap = Object.fromEntries(holidays.map(h => [h.date, h.nom]));
+  const isHoliday = (dayStr) => !!holidayMap[dayStr];
+  const getAbsForDay = (dayStr) => {
+    const dayAbs = absences.filter(a => a.date === dayStr);
+    return dayAbs.map(a => {
+      const init = a.formateur_initiales || '?';
+      const per = a.periode || (a.journee_entiere ? 'journee' : 'journee');
+      if (per === 'matin') return `${init} (matin)`;
+      if (per === 'apres_midi') return `${init} (apres-midi)`;
+      return init;
+    });
+  };
 
   const startEdit = (s) => { setHoveredSession(null); setEditSession({ ...s, formateur_ids: s.formateur_ids || [] }); setShowDialog(true); };
   const startNew = (dayStr, hour) => {
     setHoveredSession(null);
+    if (dayStr && holidayMap[dayStr]) {
+      if (!window.confirm(`${holidayMap[dayStr]} est un jour ferie. Voulez-vous quand meme creer une activite ?`)) return;
+    }
     const hEnd = hour ? `${String(Math.min(parseInt(hour.split(':')[0]) + 2, 18)).padStart(2, '0')}:${hour.split(':')[1]}` : '10:00';
-    setEditSession({ date: dayStr, heure_debut: hour || '08:00', heure_fin: hEnd, type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
+    setEditSession({ date: dayStr, date_fin_periode: '', heure_debut: hour || '08:00', heure_fin: hEnd, journee_entiere: false, type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
       group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: '' });
     setShowDialog(true);
   };
   const saveSession = async () => {
     try {
-      if (editSession.id) await API.put(`/sessions/${editSession.id}`, editSession);
-      else await API.post('/sessions', editSession);
+      if (editSession.id) {
+        await API.put(`/sessions/${editSession.id}`, editSession);
+      } else if (editSession.date_fin_periode && editSession.date_fin_periode > editSession.date) {
+        // Multi-day creation -> bulk
+        const at = atMap[editSession.type_activite_id] || {};
+        const isStage = (at.nom || '').toLowerCase().includes('stage');
+        await API.post('/sessions/bulk', {
+          ...editSession,
+          date_debut: editSession.date,
+          date_fin: editSession.date_fin_periode,
+          mode: isStage ? 'stage' : 'multi_day',
+          exclude_holidays: true,
+        });
+      } else if (editSession.journee_entiere) {
+        await API.post('/sessions', { ...editSession, heure_debut: '08:30', heure_fin: '16:30', duree: 7 });
+      } else {
+        await API.post('/sessions', editSession);
+      }
       setShowDialog(false); loadData();
     } catch (e) { console.error(e); }
   };
@@ -135,7 +167,11 @@ export default function PlanningGlobal() {
       if (dragInfo.mode === 'move') {
         const newStart = Math.max(START_MIN, Math.min(END_MIN - (dragInfo.origEnd - dragInfo.origStart), dragInfo.origStart + deltaMins));
         const dur = dragInfo.origEnd - dragInfo.origStart;
-        setDragPreview({ top: (newStart - START_MIN) * PX_PER_MIN, height: dur * PX_PER_MIN, startTime: minToTime(newStart), endTime: minToTime(newStart + dur) });
+        // Detect day under cursor
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const dayEl = el?.closest?.('[data-day]');
+        const newDay = dayEl ? dayEl.getAttribute('data-day') : null;
+        setDragPreview({ top: (newStart - START_MIN) * PX_PER_MIN, height: dur * PX_PER_MIN, startTime: minToTime(newStart), endTime: minToTime(newStart + dur), newDay });
       } else {
         const newEnd = Math.max(dragInfo.origStart + 15, Math.min(END_MIN, dragInfo.origEnd + deltaMins));
         setDragPreview({ top: dragInfo.origTop, height: (newEnd - dragInfo.origStart) * PX_PER_MIN, startTime: minToTime(dragInfo.origStart), endTime: minToTime(newEnd) });
@@ -151,7 +187,11 @@ export default function PlanningGlobal() {
 
   const handleGlobalMouseUp = useCallback(async () => {
     if (dragInfo && dragPreview) {
-      try { await API.put(`/sessions/${dragInfo.sessionId}`, { ...dragInfo.session, heure_debut: dragPreview.startTime, heure_fin: dragPreview.endTime }); loadData(); } catch (e) { console.error(e); }
+      const payload = { ...dragInfo.session, heure_debut: dragPreview.startTime, heure_fin: dragPreview.endTime };
+      if (dragInfo.mode === 'move' && dragPreview.newDay && dragPreview.newDay !== dragInfo.session.date) {
+        payload.date = dragPreview.newDay;
+      }
+      try { await API.put(`/sessions/${dragInfo.sessionId}`, payload); loadData(); } catch (e) { console.error(e); }
       setDragInfo(null); setDragPreview(null); return;
     }
     if (createDrag && createPreview) {
@@ -242,10 +282,13 @@ export default function PlanningGlobal() {
     const preview = (dragInfo && dragPreview) ? dragPreview : (createDrag && createPreview && createDragMoved.current) ? createPreview : null;
     if (!preview) return null;
     const durMin = timeToMin(preview.endTime) - timeToMin(preview.startTime);
+    const newDayLabel = (dragInfo && dragPreview && dragPreview.newDay && dragPreview.newDay !== dragInfo.session.date)
+      ? format(new Date(dragPreview.newDay), 'EEEE d MMM', { locale: fr }) : null;
     return (
       <div className="fixed z-[200] pointer-events-none inset-0">
         <div className="fixed bg-white dark:bg-slate-800 border-2 border-blue-500 rounded-lg shadow-2xl px-3 py-2"
           style={{ left: '50%', top: 12, transform: 'translateX(-50%)' }}>
+          {newDayLabel && <span className="text-xs font-semibold text-violet-600 mr-2 capitalize">{newDayLabel} ·</span>}
           <span className="text-sm font-bold text-blue-600">{preview.startTime} - {preview.endTime}</span>
           <span className="text-xs text-slate-500 ml-2">({(durMin / 60).toFixed(1)}h)</span>
         </div>
@@ -294,11 +337,18 @@ export default function PlanningGlobal() {
           <div className="grid" style={{ gridTemplateColumns: `${Math.round(50 * zoom)}px repeat(5, 1fr)`, minWidth: Math.round(700 * zoom) }}>
             <div className="border-b border-r border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/30" />
             {days.map((day, i) => {
-              const dayAbs = getAbsForDay(format(day, 'yyyy-MM-dd'));
+              const dayStr = format(day, 'yyyy-MM-dd');
+              const dayAbs = getAbsForDay(dayStr);
+              const ferie = holidayMap[dayStr];
               return (
-                <div key={i} className="border-b border-r border-slate-200 dark:border-slate-700 text-center bg-slate-50 dark:bg-slate-800/30">
+                <div key={i} className={`border-b border-r border-slate-200 dark:border-slate-700 text-center ${ferie ? 'bg-purple-50 dark:bg-purple-950/30' : 'bg-slate-50 dark:bg-slate-800/30'}`}>
                   <div className="text-slate-500 capitalize pt-1" style={{ fontSize: baseFontSmall }}>{format(day, 'EEEE', { locale: fr })}</div>
                   <div className="font-bold pb-1" style={{ fontSize: baseFontBlock + 1 }}>{format(day, 'd MMM', { locale: fr })}</div>
+                  {ferie && (
+                    <div className="bg-purple-100 dark:bg-purple-900/40 border-t border-purple-200 dark:border-purple-800 px-1 py-0.5 text-purple-700 dark:text-purple-300 font-semibold" style={{ fontSize: baseFontSmall - 1 }}>
+                      Ferie · {ferie}
+                    </div>
+                  )}
                   {dayAbs.length > 0 && (
                     <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-800 px-1 py-0.5 text-red-600 font-medium" style={{ fontSize: baseFontSmall - 1 }}>
                       Abs: {dayAbs.join(', ')}
@@ -318,9 +368,11 @@ export default function PlanningGlobal() {
             </div>
             {days.map((day, di) => {
               const dayStr = format(day, 'yyyy-MM-dd');
+              const ferie = holidayMap[dayStr];
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
               return (
-                <div key={di} className="border-r border-slate-200 dark:border-slate-700 relative" style={{ height: GRID_H }}
+                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''}`} style={{ height: GRID_H }}
+                  data-day={dayStr}
                   onMouseDown={(e) => handleGridMouseDown(e, dayStr)}>
                   {Array.from({ length: 11 }, (_, i) => 8 + i).map(h => (
                     <div key={h} className="absolute w-full border-t border-slate-100 dark:border-slate-800/50" style={{ top: (h * 60 - START_MIN) * PX_PER_MIN }} />
@@ -412,10 +464,26 @@ export default function PlanningGlobal() {
           <DialogHeader><DialogTitle>{editSession?.id ? 'Modifier la seance' : 'Nouvelle seance'}</DialogTitle></DialogHeader>
           {editSession && (
             <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-xs">Date</Label><Input type="date" value={editSession.date||''} onChange={e=>setEditSession({...editSession,date:e.target.value})} className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">Intitule</Label><Input value={editSession.intitule||''} onChange={e=>setEditSession({...editSession,intitule:e.target.value})} className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">Debut</Label><Input type="time" value={editSession.heure_debut||''} onChange={e=>setEditSession({...editSession,heure_debut:e.target.value})} className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">Fin</Label><Input type="time" value={editSession.heure_fin||''} onChange={e=>setEditSession({...editSession,heure_fin:e.target.value})} className="h-8 text-sm" /></div>
+              <div><Label className="text-xs">Date {editSession.id ? '' : '(debut)'}</Label><Input type="date" value={editSession.date||''} onChange={e=>setEditSession({...editSession,date:e.target.value})} className="h-8 text-sm" /></div>
+              {!editSession.id && (
+                <div><Label className="text-xs">Date fin (periode, optionnel)</Label><Input type="date" value={editSession.date_fin_periode||''} onChange={e=>setEditSession({...editSession,date_fin_periode:e.target.value})} className="h-8 text-sm" data-testid="session-date-fin" /></div>
+              )}
+              {editSession.id && <div><Label className="text-xs">Intitule</Label><Input value={editSession.intitule||''} onChange={e=>setEditSession({...editSession,intitule:e.target.value})} className="h-8 text-sm" /></div>}
+              {!editSession.id && <div><Label className="text-xs">Intitule</Label><Input value={editSession.intitule||''} onChange={e=>setEditSession({...editSession,intitule:e.target.value})} className="h-8 text-sm" /></div>}
+              <div className="col-span-2 flex items-center gap-2">
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={editSession.journee_entiere||false} onCheckedChange={v=>setEditSession({...editSession, journee_entiere: v, heure_debut: v ? '08:30' : (editSession.heure_debut||'08:00'), heure_fin: v ? '16:30' : (editSession.heure_fin||'10:00')})} data-testid="session-journee-entiere" />
+                  Journee entiere (8h30-16h30, 7h)
+                </label>
+                {editSession.date_fin_periode && editSession.date && editSession.date_fin_periode > editSession.date && (
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700">Multi-jours</span>
+                )}
+                {editSession.date && holidayMap[editSession.date] && (
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">Ferie · {holidayMap[editSession.date]}</span>
+                )}
+              </div>
+              <div><Label className="text-xs">Debut</Label><Input type="time" value={editSession.heure_debut||''} onChange={e=>setEditSession({...editSession,heure_debut:e.target.value})} className="h-8 text-sm" disabled={editSession.journee_entiere} /></div>
+              <div><Label className="text-xs">Fin</Label><Input type="time" value={editSession.heure_fin||''} onChange={e=>setEditSession({...editSession,heure_fin:e.target.value})} className="h-8 text-sm" disabled={editSession.journee_entiere} /></div>
               <div><Label className="text-xs">Type</Label>
                 <Select value={editSession.type_activite_id||''} onValueChange={v=>setEditSession({...editSession,type_activite_id:v})}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>
@@ -445,12 +513,26 @@ export default function PlanningGlobal() {
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="Prevu">Prevu</SelectItem><SelectItem value="Valide">Valide</SelectItem></SelectContent></Select></div>
               <div className="col-span-2"><Label className="text-xs">Formateurs</Label>
-                <div className="flex flex-wrap gap-1.5 mt-1">{formateurs.map(f=>(
+                <div className="flex flex-wrap gap-1.5 mt-1 items-center">
+                  <button type="button"
+                    className="px-2 py-0.5 rounded border text-[11px] cursor-pointer bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700 font-medium"
+                    onClick={() => {
+                      const allIds = formateurs.map(f => f.id);
+                      const cur = editSession.formateur_ids || [];
+                      const same = cur.length === allIds.length && cur.every(id => allIds.includes(id));
+                      setEditSession({ ...editSession, formateur_ids: same ? [] : allIds });
+                    }}
+                    data-testid="select-all-formateurs">
+                    {((editSession.formateur_ids||[]).length === formateurs.length && formateurs.length>0) ? 'Tout deselectionner' : 'Tous les formateurs'}
+                  </button>
+                  {formateurs.map(f=>(
                   <label key={f.id} className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer
                     ${(editSession.formateur_ids||[]).includes(f.id)?'bg-slate-200 dark:bg-slate-700 border-slate-400':'border-slate-200 dark:border-slate-700'}`}>
                     <input type="checkbox" className="w-3 h-3" checked={(editSession.formateur_ids||[]).includes(f.id)}
                       onChange={e=>{const ids=editSession.formateur_ids||[];setEditSession({...editSession,formateur_ids:e.target.checked?[...ids,f.id]:ids.filter(i=>i!==f.id)});}}/>
-                    {f.initiales} - {f.prenom} {f.nom}</label>))}</div></div>
+                    {f.initiales} - {f.prenom} {f.nom}</label>))}
+                </div>
+              </div>
               <div className="col-span-2 flex items-center gap-4">
                 <label className="flex items-center gap-2 text-xs"><Checkbox checked={editSession.saisi||false} onCheckedChange={v=>setEditSession({...editSession,saisi:v})}/>Saisi</label></div>
               <div className="col-span-2"><Label className="text-xs">Commentaire</Label><Input value={editSession.commentaire||''} onChange={e=>setEditSession({...editSession,commentaire:e.target.value})} className="h-8 text-sm"/></div>

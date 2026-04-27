@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, GripVertical, Copy, ListTodo } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { format, startOfMonth, endOfMonth, eachWeekOfInterval, endOfWeek, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -33,6 +33,8 @@ export default function PlanningMacro() {
   const [preSaisie, setPreSaisie] = useState(null);
   const [dragSession, setDragSession] = useState(null);
   const [dragOverWeek, setDragOverWeek] = useState(null);
+  const [aProgrammer, setAProgrammer] = useState([]);
+  const [dragActivite, setDragActivite] = useState(null); // activity from sidebar
 
   const months = selectedMonths.map(m => new Date(m >= 8 ? startYear : startYear + 1, m, 1));
 
@@ -44,12 +46,14 @@ export default function PlanningMacro() {
     if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
-      const [sessRes, prRes, atRes, ueRes, domRes, syRes] = await Promise.all([
+      const [sessRes, prRes, atRes, ueRes, domRes, syRes, apRes] = await Promise.all([
         API.get('/sessions', { params }), API.get('/promotions'), API.get('/activity-types'),
-        API.get('/ues'), API.get('/domains'), API.get('/school-years')
+        API.get('/ues'), API.get('/domains'), API.get('/school-years'),
+        API.get('/fiches-projet/a-programmer', { params: selectedPromos.size === 1 ? { promotion_id: [...selectedPromos][0] } : {} })
       ]);
       setSessions(sessRes.data); setPromotions(prRes.data); setActTypes(atRes.data);
       setUes(ueRes.data); setDomains(domRes.data); setSchoolYears(syRes.data);
+      setAProgrammer(apRes.data || []);
     } catch (e) { console.error(e); }
   }, [startYear, selectedMonths, selectedPromos, filterSemestre]);
 
@@ -99,7 +103,7 @@ export default function PlanningMacro() {
     setPreSaisie({
       date: format(weekStart, 'yyyy-MM-dd'), intitule: '', type_activite_id: '',
       ue_id: ueId || '', semestre: filterSemestre !== 'all' ? filterSemestre : '',
-      promotion_id: filterPromo !== 'all' ? filterPromo : '',
+      promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
       heure_debut: '', heure_fin: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false
     });
     setShowPreSaisie(true);
@@ -143,18 +147,44 @@ export default function PlanningMacro() {
     setDragOverWeek(format(weekStart, 'yyyy-MM-dd'));
   };
 
-  const handleDrop = (e, weekStart) => {
+  const handleDrop = async (e, weekStart) => {
     e.preventDefault();
+    setDragOverWeek(null);
+    if (dragActivite) {
+      // Drop activity from "À programmer" -> create session and link
+      try {
+        const newDate = format(weekStart, 'yyyy-MM-dd');
+        const payload = {
+          date: newDate,
+          intitule: dragActivite.nom,
+          ue_id: dragActivite.ue_id,
+          semestre: dragActivite.semestre,
+          promotion_id: dragActivite.promotion_id,
+          group_id: dragActivite.taille_groupe === 'demi_promo' ? '' : (dragActivite.taille_groupe === 'quart_promo' ? '' : ''),
+          type_activite_id: dragActivite.type_activite_id || '',
+          formateur_ids: [], heure_debut: '08:00', heure_fin: `${String(8 + Math.min(8, Math.max(1, Math.round(dragActivite.heures || 2)))).padStart(2, '0')}:00`,
+          statut: 'Prevu', saisi: false,
+        };
+        const { data: newSess } = await API.post('/sessions', payload);
+        await API.post(`/fiches-projet/${dragActivite.fiche_id}/activites/${dragActivite.activite_id}/link-session`, { session_id: newSess.id });
+        setDragActivite(null);
+        loadData();
+      } catch (err) { console.error(err); setDragActivite(null); }
+      return;
+    }
     if (!dragSession) return;
     const newDate = format(weekStart, 'yyyy-MM-dd');
-    setDragOverWeek(null);
-    // Open edit dialog with new date pre-filled
     setPreSaisie({ ...dragSession, date: newDate, formateur_ids: dragSession.formateur_ids || [] });
     setShowPreSaisie(true);
     setDragSession(null);
   };
 
-  const handleDragEnd = () => { setDragSession(null); setDragOverWeek(null); };
+  const handleDragEnd = () => { setDragSession(null); setDragOverWeek(null); setDragActivite(null); };
+
+  const duplicateSession = async (id, e) => {
+    e.stopPropagation();
+    try { await API.post(`/sessions/${id}/duplicate`); loadData(); } catch (err) { console.error(err); }
+  };
 
   // Zoom sizes
   const baseFontUe = 11 * zoom;
@@ -236,9 +266,61 @@ export default function PlanningMacro() {
         ))}
       </div>
 
-      {/* Timeline */}
-      <Card className="overflow-x-auto">
-        <div className="p-0" style={{ minWidth: minWidth }}>
+      {/* Layout: sidebar "À programmer" + timeline */}
+      <div className="flex gap-3">
+        {/* Sidebar À programmer */}
+        <Card className="w-72 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar">
+          <div className="px-3 py-2 border-b bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ListTodo size={14} className="text-violet-600" />
+              <span className="text-sm font-semibold">A programmer</span>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 font-bold">{aProgrammer.length}</span>
+          </div>
+          {aProgrammer.length === 0 ? (
+            <p className="p-3 text-xs text-slate-500">Aucune activite a programmer. Creez des fiches projet dans l'onglet Coordination.</p>
+          ) : (
+            <div className="p-2 space-y-3">
+              {Object.entries(aProgrammer.reduce((acc, a) => { (acc[a.ue_id] = acc[a.ue_id] || []).push(a); return acc; }, {})).map(([ueId, items]) => {
+                const ue = ueMap[ueId] || {};
+                // Compute progression: total in fiches for this ue vs scheduled
+                const totalForUE = sessions.filter(s => s.ue_id === ueId).length + items.length;
+                const scheduled = totalForUE - items.length;
+                return (
+                  <div key={ueId}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate">{ue.code_ue || 'UE ?'} - {ue.intitule || ''}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">{scheduled}/{totalForUE}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {items.map(a => {
+                        const promo = promoMap[a.promotion_id] || {};
+                        return (
+                          <div key={a.activite_id}
+                            draggable={isAdmin}
+                            onDragStart={(e) => { setDragActivite(a); e.dataTransfer.effectAllowed = 'copy'; }}
+                            onDragEnd={handleDragEnd}
+                            className="px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-violet-400 cursor-grab active:cursor-grabbing"
+                            data-testid={`a-prog-${a.activite_id}`}>
+                            <div className="text-[11px] font-medium truncate">{a.nom}</div>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="text-[9px] text-slate-500">{a.heures}h · {(a.taille_groupe || 'promo_entiere').replace('_', ' ')}</span>
+                              {promo.nom && <span className="text-[9px] text-slate-400">{promo.nom.replace('Promotion ', '')}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* Timeline */}
+        <Card className="overflow-x-auto flex-1">
+          <div className="p-0" style={{ minWidth: minWidth }}>
           {/* Month headers */}
           <div className="flex border-b border-slate-200 dark:border-slate-700">
             <div className="flex-shrink-0 p-1.5 border-r bg-slate-50 dark:bg-slate-800/50 font-semibold" style={{ width: colLeft, fontSize: baseFontUe }}>UE / Domaine</div>
@@ -309,12 +391,18 @@ export default function PlanningMacro() {
                                         draggable={isAdmin}
                                         onDragStart={(e) => handleDragStart(e, s)}
                                         onDragEnd={handleDragEnd}
-                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-grab active:cursor-grabbing truncate"
+                                        className="px-0.5 py-0.5 rounded mb-0.5 cursor-grab active:cursor-grabbing truncate group relative"
                                         style={{ fontSize: baseFontCell, backgroundColor: (at.couleur || '#94a3b8') + '30', borderLeft: `2px solid ${at.couleur || '#94a3b8'}` }}
                                         onClick={(e) => { e.stopPropagation(); isAdmin && editPreSaisie(s); }}
                                         onMouseEnter={(e) => handleHover(e, s)}
                                         onMouseLeave={() => setHoveredItem(null)}>
-                                        {at.nom}
+                                        <span>{at.nom}</span>
+                                        {isAdmin && (
+                                          <button title="Dupliquer" className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 bg-white/90 dark:bg-slate-800 rounded p-0.5 shadow"
+                                            onClick={(e) => duplicateSession(s.id, e)} data-testid={`dup-${s.id}`}>
+                                            <Copy size={baseFontCell + 1} className="text-slate-600" />
+                                          </button>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -330,8 +418,9 @@ export default function PlanningMacro() {
               </div>
             );
           })}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
 
       {/* Hover tooltip */}
       {hoveredItem && !showPreSaisie && !dragSession && (

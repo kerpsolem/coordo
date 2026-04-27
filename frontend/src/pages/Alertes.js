@@ -16,11 +16,44 @@ export default function Alertes() {
   const [showWarning, setShowWarning] = useState(true);
   const [showInfo, setShowInfo] = useState(true);
 
+  // Period filter
+  const [periodMode, setPeriodMode] = useState('custom'); // semestre | annee_scolaire | custom
+  const [filterSemestre, setFilterSemestre] = useState('');
+  const [filterAnneeSco, setFilterAnneeSco] = useState('');
+  const [schoolYears, setSchoolYears] = useState([]);
+
+  // Load school years once
   useEffect(() => {
-    const today = new Date();
-    setDateDebut(format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
-    setDateFin(format(addDays(today, 30), 'yyyy-MM-dd'));
+    (async () => {
+      try { const { data } = await API.get('/school-years'); setSchoolYears(data); } catch (e) { console.error(e); }
+    })();
   }, []);
+
+  // Default custom range
+  useEffect(() => {
+    if (periodMode === 'custom' && !dateDebut) {
+      const today = new Date();
+      setDateDebut(format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+      setDateFin(format(addDays(today, 30), 'yyyy-MM-dd'));
+    }
+  }, [periodMode, dateDebut]);
+
+  // Apply filter mode
+  useEffect(() => {
+    if (periodMode === 'annee_scolaire' && filterAnneeSco) {
+      const sy = schoolYears.find(s => s.id === filterAnneeSco);
+      if (sy?.date_debut && sy?.date_fin) { setDateDebut(sy.date_debut); setDateFin(sy.date_fin); }
+    } else if (periodMode === 'semestre' && filterSemestre) {
+      // Approximate semester windows in current year
+      const y = new Date().getFullYear();
+      const sNum = parseInt(filterSemestre.replace('S', ''), 10);
+      const isOdd = sNum % 2 === 1;
+      // S1, S3, S5 = sept->fev ; S2, S4, S6 = fev->aug
+      const start = isOdd ? `${y - (new Date().getMonth() < 8 ? 1 : 0)}-09-01` : `${y}-02-01`;
+      const end = isOdd ? `${y + (new Date().getMonth() < 8 ? 0 : 1)}-01-31` : `${y}-08-31`;
+      setDateDebut(start); setDateFin(end);
+    }
+  }, [periodMode, filterAnneeSco, filterSemestre, schoolYears]);
 
   const fetchAlerts = useCallback(async () => {
     if (!dateDebut || !dateFin) return;
@@ -52,8 +85,45 @@ export default function Alertes() {
       <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Alertes</h1>
 
       <div className="flex flex-wrap gap-3 items-end">
-        <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40 h-8 text-xs" /></div>
-        <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40 h-8 text-xs" /></div>
+        <div>
+          <Label className="text-xs">Periode</Label>
+          <Select value={periodMode} onValueChange={setPeriodMode}>
+            <SelectTrigger className="w-44 h-8 text-xs" data-testid="alert-period-mode"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="custom">Personnalisee</SelectItem>
+              <SelectItem value="semestre">Par semestre</SelectItem>
+              <SelectItem value="annee_scolaire">Par annee scolaire</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {periodMode === 'semestre' && (
+          <div>
+            <Label className="text-xs">Semestre</Label>
+            <Select value={filterSemestre} onValueChange={setFilterSemestre}>
+              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue placeholder="Choisir" /></SelectTrigger>
+              <SelectContent>
+                {['S1','S2','S3','S4','S5','S6'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {periodMode === 'annee_scolaire' && (
+          <div>
+            <Label className="text-xs">Annee scolaire</Label>
+            <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
+              <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Choisir" /></SelectTrigger>
+              <SelectContent>
+                {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {periodMode === 'custom' && (
+          <>
+            <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40 h-8 text-xs" /></div>
+            <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40 h-8 text-xs" /></div>
+          </>
+        )}
         <div className="flex items-center gap-3 ml-2">
           <label className="flex items-center gap-1.5 text-xs cursor-pointer">
             <Checkbox checked={showError} onCheckedChange={setShowError} />

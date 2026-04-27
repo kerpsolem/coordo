@@ -10,6 +10,7 @@ import PlanningFormateur from './pages/PlanningFormateur';
 import AttributionCopies from './pages/AttributionCopies';
 import RecapHeures from './pages/RecapHeures';
 import CoordinationPlanning from './pages/CoordinationPlanning';
+import Coordination from './pages/Coordination';
 import Alertes from './pages/Alertes';
 import AbsencesFormateurs from './pages/AbsencesFormateurs';
 import PenseBetes from './pages/PenseBetes';
@@ -37,6 +38,7 @@ function App() {
           <Route path="/attribution-copies" element={<ProtectedRoute><AttributionCopies /></ProtectedRoute>} />
           <Route path="/recap-heures" element={<ProtectedRoute><RecapHeures /></ProtectedRoute>} />
           <Route path="/coordination-planning" element={<ProtectedRoute><CoordinationPlanning /></ProtectedRoute>} />
+          <Route path="/coordination" element={<ProtectedRoute><Coordination /></ProtectedRoute>} />
           <Route path="/alertes" element={<ProtectedRoute><Alertes /></ProtectedRoute>} />
           <Route path="/absences-formateurs" element={<ProtectedRoute><AbsencesFormateurs /></ProtectedRoute>} />
           <Route path="/pense-betes" element={<ProtectedRoute><PenseBetes /></ProtectedRoute>} />

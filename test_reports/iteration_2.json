@@ -1,0 +1,39 @@
+{
+  "summary": "Backend + frontend smoke testing for new batch (holidays, sessions/bulk, fiches-projet, absences periode/bi-mensuelle, alerts period mode, dashboard cours-only, PlanningGlobal multi-day/journee-entiere/tous-formateurs/holidays, PlanningMacro a-programmer sidebar, Coordination page). Backend 12/12 pytest PASS. Frontend: all new data-testids found and rendering correctly; purple holiday 'Fete du travail' confirmed visible in week 27-Apr/1-May 2026.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dialogs (Nouvelle absence, Nouvelle seance)", "issues": ["Console warning: 'Missing Description or aria-describedby for DialogContent' (Radix a11y warning, non-blocking)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "[Optional/low] Add DialogDescription or aria-describedby to shadcn Dialog components to silence Radix a11y warnings.",
+    "[Optional] Add data-testid on the inner <input type=checkbox> of 'dashboard-cours-only' (currently the testid sits on the wrapping <label>, so automated tests can't easily assert checked state)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~1400+ lines - consider splitting into routers (auth, sessions, fiches_projet, dashboard) for maintainability (>700 LOC threshold).",
+    "sessions/bulk mode=='stage' uses isocalendar()[:2] for week grouping - correct; 35h cap scaling preserves ratio - OK.",
+    "/api/holidays is public (no auth) as documented in review_request - verified OK.",
+    "fiches-projet link-session does not verify session_id actually exists in sessions collection - could leave orphan references. Consider validation.",
+    "PlanningGlobal dialog is missing DialogDescription (Radix warning)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new - 12 tests)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% on tested flows"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None - used existing seeded promotions; all TEST_ prefixed data cleaned up by fixtures.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend routes: /absences-formateurs (NOT /absences), /recap-heures (NOT /recap), /coordination, /planning-global, /planning-macro, /alertes. Absence 'type-recurrence' select is conditionally rendered only when the 'Recurrence' checkbox is enabled. 'dashboard-cours-only' testid is on the <label> not input. The app shows a persistent 'MODE EDITION' banner when logged in as admin.",
+  "rca of the issue": "No bugs found. Initial frontend test FAILURES (dashboard-cours-only, tab-graphiques, new-absence-btn) were false negatives due to (1) wrong route guesses and (2) testid on <label> wrapper. Re-tests after route/selector correction all passed. All backend endpoints work as specified."
+}

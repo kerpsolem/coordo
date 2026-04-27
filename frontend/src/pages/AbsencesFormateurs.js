@@ -43,7 +43,7 @@ export default function AbsencesFormateurs() {
 
   const startNew = () => {
     setEditItem({
-      formateur_id: '', date_debut: '', date_fin: '', journee_entiere: true,
+      formateur_id: '', date_debut: '', date_fin: '', journee_entiere: true, periode: 'journee',
       recurrence: false, type_recurrence: '', jours_recurrence: [], date_fin_recurrence: '', archived: false
     });
     setShowDialog(true);
@@ -107,6 +107,7 @@ export default function AbsencesFormateurs() {
                 <TableHead className="text-xs">Date debut</TableHead>
                 <TableHead className="text-xs">Date fin</TableHead>
                 <TableHead className="text-xs">Journee</TableHead>
+                <TableHead className="text-xs">Periode</TableHead>
                 <TableHead className="text-xs">Recurrence</TableHead>
                 <TableHead className="text-xs">Jours</TableHead>
                 <TableHead className="text-xs">Fin recurrence</TableHead>
@@ -127,6 +128,7 @@ export default function AbsencesFormateurs() {
                     <TableCell className="py-2">{ab.date_debut}</TableCell>
                     <TableCell className="py-2">{ab.date_fin}</TableCell>
                     <TableCell className="py-2">{ab.journee_entiere ? 'Oui' : 'Non'}</TableCell>
+                    <TableCell className="py-2 text-xs capitalize">{(ab.periode || 'journee').replace('_', ' ')}</TableCell>
                     <TableCell className="py-2">
                       {ab.recurrence ? (
                         <span className="px-1.5 py-0.5 rounded text-xs bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400">
@@ -188,9 +190,21 @@ export default function AbsencesFormateurs() {
                 <div><Label>Date fin</Label><Input type="date" value={editItem.date_fin || ''} onChange={e => setEditItem({ ...editItem, date_fin: e.target.value })} /></div>
               </div>
               <label className="flex items-center gap-2 text-sm">
-                <Checkbox checked={editItem.journee_entiere} onCheckedChange={v => setEditItem({ ...editItem, journee_entiere: v })} />
+                <Checkbox checked={editItem.journee_entiere} onCheckedChange={v => setEditItem({ ...editItem, journee_entiere: v, periode: v ? 'journee' : (editItem.periode || 'matin') })} />
                 Journee entiere
               </label>
+              {!editItem.journee_entiere && (
+                <div>
+                  <Label>Periode</Label>
+                  <Select value={editItem.periode || 'matin'} onValueChange={v => setEditItem({ ...editItem, periode: v })}>
+                    <SelectTrigger data-testid="absence-periode"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="matin">Matin</SelectItem>
+                      <SelectItem value="apres_midi">Apres-midi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox checked={editItem.recurrence || false} onCheckedChange={v => setEditItem({ ...editItem, recurrence: v })} />
                 Recurrence
@@ -200,8 +214,11 @@ export default function AbsencesFormateurs() {
                   <div>
                     <Label>Type de recurrence</Label>
                     <Select value={editItem.type_recurrence || ''} onValueChange={v => setEditItem({ ...editItem, type_recurrence: v })}>
-                      <SelectTrigger><SelectValue placeholder="Choisir" /></SelectTrigger>
-                      <SelectContent><SelectItem value="hebdomadaire">Hebdomadaire</SelectItem></SelectContent>
+                      <SelectTrigger data-testid="absence-type-recurrence"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hebdomadaire">Hebdomadaire (toutes les semaines)</SelectItem>
+                        <SelectItem value="bimensuelle">Bi-mensuelle (toutes les 2 semaines)</SelectItem>
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>

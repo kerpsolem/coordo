@@ -693,6 +693,274 @@ async def delete_user(id: str, request: Request):
         raise HTTPException(400, "Impossible de supprimer votre propre compte")
     return await crud_delete("users", id)
 
+
+# ===================== JOURS FERIES (FR) =====================
+def _easter_sunday(year: int) -> date:
+    # Anonymous Gregorian (Meeus) algorithm
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+def french_holidays(year: int):
+    easter = _easter_sunday(year)
+    fixed = [
+        (date(year, 1, 1), "Jour de l'An"),
+        (date(year, 5, 1), "Fete du travail"),
+        (date(year, 5, 8), "Victoire 1945"),
+        (date(year, 7, 14), "Fete nationale"),
+        (date(year, 8, 15), "Assomption"),
+        (date(year, 11, 1), "Toussaint"),
+        (date(year, 11, 11), "Armistice"),
+        (date(year, 12, 25), "Noel"),
+    ]
+    movable = [
+        (easter + timedelta(days=1), "Lundi de Paques"),
+        (easter + timedelta(days=39), "Ascension"),
+        (easter + timedelta(days=50), "Lundi de Pentecote"),
+    ]
+    out = [{"date": d.isoformat(), "nom": n} for d, n in fixed + movable]
+    out.sort(key=lambda x: x["date"])
+    return out
+
+@api_router.get("/holidays")
+async def get_holidays(year: Optional[int] = None, date_debut: Optional[str] = None, date_fin: Optional[str] = None):
+    if year:
+        return french_holidays(year)
+    if date_debut and date_fin:
+        try:
+            y1 = int(date_debut[:4]); y2 = int(date_fin[:4])
+        except:
+            raise HTTPException(400, "Format de date invalide")
+        all_h = []
+        for y in range(y1, y2 + 1):
+            all_h.extend(french_holidays(y))
+        return [h for h in all_h if date_debut <= h["date"] <= date_fin]
+    today = date.today().year
+    return french_holidays(today) + french_holidays(today + 1)
+
+def _holidays_set(year_start: int, year_end: int):
+    s = set()
+    for y in range(year_start, year_end + 1):
+        for h in french_holidays(y):
+            s.add(h["date"])
+    return s
+
+# ===================== SESSIONS BULK (multi-day / Stage) =====================
+@api_router.post("/sessions/bulk")
+async def create_sessions_bulk(request: Request):
+    """
+    Body: { date_debut, date_fin, heure_debut, heure_fin, journee_entiere?, mode, exclude_holidays?, ... session fields }
+    mode: 'multi_day' (one session per weekday) or 'stage' (computed week range)
+    Returns: { created: [...], total_heures, total_sessions, jours_feries_exclus: [...] }
+    """
+    await require_admin(request)
+    b = await request.json()
+    dd = b.get("date_debut"); df = b.get("date_fin")
+    if not dd or not df:
+        raise HTTPException(400, "date_debut et date_fin requis")
+    try:
+        d_start = datetime.strptime(dd, "%Y-%m-%d").date()
+        d_end = datetime.strptime(df, "%Y-%m-%d").date()
+    except:
+        raise HTTPException(400, "Format date invalide (YYYY-MM-DD)")
+    if d_end < d_start:
+        raise HTTPException(400, "date_fin avant date_debut")
+
+    journee_entiere = b.get("journee_entiere", False)
+    mode = b.get("mode", "multi_day")  # multi_day | stage
+    exclude_holidays = b.get("exclude_holidays", True)
+    holidays = _holidays_set(d_start.year, d_end.year) if exclude_holidays else set()
+
+    if journee_entiere or mode == "stage":
+        b.setdefault("heure_debut", "08:30")
+        b.setdefault("heure_fin", "16:30")
+
+    # Auto-compute UE -> domain
+    if b.get("ue_id"):
+        ue = await db.ues.find_one({"id": b["ue_id"]}, {"_id": 0})
+        if ue:
+            b["domain_id"] = ue.get("domain_id", "")
+
+    # Per-day duration
+    duree_jour = 0
+    if b.get("heure_debut") and b.get("heure_fin"):
+        try:
+            hd = datetime.strptime(b["heure_debut"], "%H:%M")
+            hf = datetime.strptime(b["heure_fin"], "%H:%M")
+            duree_jour = round((hf - hd).total_seconds() / 3600, 2)
+        except:
+            duree_jour = 0
+    if journee_entiere:
+        duree_jour = 7  # 8h30-16h30 with 1h pause
+
+    # Build daily list
+    created = []
+    excluded = []
+    cur = d_start
+    base = {k: v for k, v in b.items() if k not in ["date_debut", "date_fin", "mode", "exclude_holidays", "journee_entiere", "id"]}
+    base["journee_entiere"] = journee_entiere
+    if mode == "stage":
+        base["type_marker"] = "stage"
+
+    while cur <= d_end:
+        # Only weekdays (Mon-Fri)
+        if cur.weekday() < 5:
+            iso = cur.isoformat()
+            if iso in holidays:
+                excluded.append(iso)
+            else:
+                # Stage: cap weekly to 35h
+                doc = dict(base)
+                doc["date"] = iso
+                doc["duree"] = duree_jour
+                doc["id"] = str(uuid.uuid4())
+                doc["created_at"] = datetime.now(timezone.utc).isoformat()
+                await db.sessions.insert_one(doc)
+                created.append({k: v for k, v in doc.items() if k != "_id"})
+        cur += timedelta(days=1)
+
+    # Stage: enforce 35h/week max (trim duration if needed)
+    if mode == "stage":
+        from collections import defaultdict
+        by_week = defaultdict(list)
+        for s in created:
+            d_obj = datetime.strptime(s["date"], "%Y-%m-%d").date()
+            wk = d_obj.isocalendar()[:2]
+            by_week[wk].append(s)
+        for wk, sess in by_week.items():
+            total = sum(s.get("duree", 0) for s in sess)
+            if total > 35:
+                ratio = 35 / total
+                for s in sess:
+                    new_d = round(s["duree"] * ratio, 2)
+                    await db.sessions.update_one({"id": s["id"]}, {"$set": {"duree": new_d}})
+                    s["duree"] = new_d
+
+    total_h = sum(s.get("duree", 0) for s in created)
+    return {
+        "created": created,
+        "total_heures": round(total_h, 2),
+        "total_sessions": len(created),
+        "jours_feries_exclus": excluded,
+    }
+
+# ===================== COORDINATION - FICHES PROJET =====================
+@api_router.get("/fiches-projet")
+async def list_fiches_projet(request: Request, semestre: Optional[str] = None, ue_id: Optional[str] = None, promotion_id: Optional[str] = None):
+    await get_user(request)
+    q = {}
+    if semestre: q["semestre"] = semestre
+    if ue_id: q["ue_id"] = ue_id
+    if promotion_id: q["promotion_id"] = promotion_id
+    return await crud_list("fiches_projet", q, sort=[("created_at", -1)])
+
+@api_router.get("/fiches-projet/a-programmer")
+async def fiches_a_programmer(request: Request, promotion_id: Optional[str] = None, semestre: Optional[str] = None):
+    """Returns list of activities from fiches_projet that are NOT yet placed in planning (no linked session)."""
+    await get_user(request)
+    q = {}
+    if promotion_id: q["promotion_id"] = promotion_id
+    if semestre: q["semestre"] = semestre
+    fiches = await db.fiches_projet.find(q, {"_id": 0}).to_list(2000)
+    result = []
+    for f in fiches:
+        for act in f.get("activites", []):
+            if not act.get("session_id"):  # not yet placed
+                result.append({
+                    "fiche_id": f.get("id"),
+                    "ue_id": f.get("ue_id"),
+                    "semestre": f.get("semestre"),
+                    "promotion_id": act.get("promotion_id") or f.get("promotion_id"),
+                    "activite_id": act.get("id"),
+                    "nom": act.get("nom", ""),
+                    "heures": act.get("heures", 0),
+                    "taille_groupe": act.get("taille_groupe", "promo_entiere"),
+                    "ordre": act.get("ordre", 99),
+                    "type_activite_id": act.get("type_activite_id"),
+                })
+    result.sort(key=lambda x: (x["ue_id"], x["ordre"]))
+    return result
+
+@api_router.post("/fiches-projet")
+async def create_fiche_projet(request: Request):
+    await require_admin(request)
+    b = await request.json()
+    b["id"] = str(uuid.uuid4())
+    b["created_at"] = datetime.now(timezone.utc).isoformat()
+    # Ensure activites have ids
+    for act in b.get("activites", []):
+        if not act.get("id"):
+            act["id"] = str(uuid.uuid4())
+    await db.fiches_projet.insert_one(b)
+    return {k: v for k, v in b.items() if k != "_id"}
+
+@api_router.put("/fiches-projet/{id}")
+async def update_fiche_projet(id: str, request: Request):
+    await require_admin(request)
+    b = await request.json()
+    b.pop("_id", None); b.pop("id", None)
+    b["updated_at"] = datetime.now(timezone.utc).isoformat()
+    for act in b.get("activites", []) or []:
+        if not act.get("id"):
+            act["id"] = str(uuid.uuid4())
+    r = await db.fiches_projet.find_one_and_update({"id": id}, {"$set": b}, return_document=True)
+    if not r:
+        raise HTTPException(404, "Fiche non trouvee")
+    return {k: v for k, v in r.items() if k != "_id"}
+
+@api_router.delete("/fiches-projet/{id}")
+async def delete_fiche_projet(id: str, request: Request):
+    await require_admin(request)
+    return await crud_delete("fiches_projet", id)
+
+@api_router.post("/fiches-projet/{fiche_id}/activites/{activite_id}/link-session")
+async def link_activite_session(fiche_id: str, activite_id: str, request: Request):
+    """Link a fiche_projet activity to a created session_id (so it's removed from 'À programmer')."""
+    await require_admin(request)
+    b = await request.json()
+    session_id = b.get("session_id")
+    fiche = await db.fiches_projet.find_one({"id": fiche_id}, {"_id": 0})
+    if not fiche:
+        raise HTTPException(404, "Fiche non trouvee")
+    activites = fiche.get("activites", [])
+    found = False
+    for act in activites:
+        if act.get("id") == activite_id:
+            act["session_id"] = session_id
+            found = True
+            break
+    if not found:
+        raise HTTPException(404, "Activite non trouvee dans la fiche")
+    await db.fiches_projet.update_one({"id": fiche_id}, {"$set": {"activites": activites}})
+    return {"message": "Lie", "session_id": session_id}
+
+@api_router.post("/fiches-projet/{fiche_id}/activites/{activite_id}/unlink-session")
+async def unlink_activite_session(fiche_id: str, activite_id: str, request: Request):
+    await require_admin(request)
+    fiche = await db.fiches_projet.find_one({"id": fiche_id}, {"_id": 0})
+    if not fiche:
+        raise HTTPException(404, "Fiche non trouvee")
+    activites = fiche.get("activites", [])
+    for act in activites:
+        if act.get("id") == activite_id:
+            act.pop("session_id", None)
+            break
+    await db.fiches_projet.update_one({"id": fiche_id}, {"$set": {"activites": activites}})
+    return {"message": "Delie"}
+
+
 # ===================== DASHBOARD =====================
 SAINTS = {
     "01-01": "Marie", "01-02": "Basile", "01-03": "Genevieve", "01-04": "Odilon", "01-05": "Edouard",

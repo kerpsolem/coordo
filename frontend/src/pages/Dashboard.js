@@ -16,13 +16,15 @@ export default function Dashboard() {
   const [filterPromo, setFilterPromo] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
   const [filterAnneeSco, setFilterAnneeSco] = useState('all');
+  const [coursOnly, setCoursOnly] = useState(true); // default ON: only "Cours" type
   const [promotions, setPromotions] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
+  const [actTypes, setActTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([API.get('/promotions'), API.get('/school-years')]).then(([p, sy]) => {
-      setPromotions(p.data); setSchoolYears(sy.data);
+    Promise.all([API.get('/promotions'), API.get('/school-years'), API.get('/activity-types')]).then(([p, sy, at]) => {
+      setPromotions(p.data); setSchoolYears(sy.data); setActTypes(at.data);
     }).catch(() => {});
   }, []);
 
@@ -55,13 +57,17 @@ export default function Dashboard() {
     const params = { date_debut: dateDebut, date_fin: dateFin };
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     if (filterPromo !== 'all') params.promotion_id = filterPromo;
+    if (coursOnly) {
+      const cours = actTypes.find(a => (a.nom || '').toLowerCase().startsWith('cours'));
+      if (cours) params.type_activite_id = cours.id;
+    }
 
     try {
       const { data: d } = await API.get('/dashboard', { params });
       setData(d);
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [period, weekNum, filterPromo, filterSemestre, filterAnneeSco, promotions, schoolYears]);
+  }, [period, weekNum, filterPromo, filterSemestre, filterAnneeSco, coursOnly, actTypes, promotions, schoolYears]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -122,6 +128,10 @@ export default function Dashboard() {
             {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
+        <label className="flex items-center gap-1.5 ml-2 cursor-pointer select-none" data-testid="dashboard-cours-only">
+          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={coursOnly} onChange={e => setCoursOnly(e.target.checked)} />
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Cours uniquement</span>
+        </label>
       </div>
 
       {/* Saint + Citation */}

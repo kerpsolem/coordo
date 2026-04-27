@@ -7,9 +7,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Filter } from 'lucide-react';
+import { Filter, BarChart3 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addWeeks, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell, LineChart, Line
+} from 'recharts';
+
+const CHART_COLORS = ['#6366F1', '#34D399', '#FBBF24', '#F43F5E', '#A78BFA', '#06B6D4', '#F97316', '#94A3B8', '#38BDF8', '#FB923C', '#818CF8', '#10B981'];
 
 export default function RecapHeures() {
   const [data, setData] = useState(null);
@@ -66,6 +72,45 @@ export default function RecapHeures() {
   }, [dateDebut, dateFin, filterFormateur, filterPromo, filterType, filterSemestre, filterAnneeSco, schoolYears]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ---- Chart data ----
+  const chartFormateurs = data?.par_formateur
+    ? Object.entries(data.par_formateur)
+        .map(([name, info]) => ({ name, heures: +info.total.toFixed(1) }))
+        .sort((a, b) => b.heures - a.heures)
+        .slice(0, 12)
+    : [];
+
+  const chartTypes = data?.par_type_activite
+    ? Object.entries(data.par_type_activite)
+        .map(([name, h]) => ({ name, value: +h.toFixed(1) }))
+        .sort((a, b) => b.value - a.value)
+    : [];
+
+  const chartPromos = data?.par_promotion
+    ? Object.entries(data.par_promotion)
+        .map(([name, h]) => ({ name: name.replace('Promotion ', ''), heures: +h.toFixed(1) }))
+        .sort((a, b) => b.heures - a.heures)
+    : [];
+
+  const chartSemaines = data?.par_semaine
+    ? Object.entries(data.par_semaine)
+        .map(([w, h]) => ({ semaine: `S${w}`, heures: +h.toFixed(1), _w: Number(w) }))
+        .sort((a, b) => a._w - b._w)
+    : [];
+
+  const chartUes = data?.par_ue
+    ? Object.entries(data.par_ue)
+        .map(([name, h]) => ({ name, heures: +h.toFixed(1) }))
+        .sort((a, b) => b.heures - a.heures)
+        .slice(0, 12)
+    : [];
+
+  const chartSemestres = data?.par_semestre
+    ? Object.entries(data.par_semestre)
+        .map(([s, h]) => ({ semestre: s, heures: +h.toFixed(1) }))
+        .sort((a, b) => a.semestre.localeCompare(b.semestre))
+    : [];
 
   return (
     <div className="space-y-4" data-testid="recap-heures">
@@ -142,6 +187,7 @@ export default function RecapHeures() {
           <TabsTrigger value="semaine">Par semaine</TabsTrigger>
           <TabsTrigger value="semestre">Par semestre</TabsTrigger>
           <TabsTrigger value="ue">Par UE</TabsTrigger>
+          <TabsTrigger value="graphiques" data-testid="tab-graphiques"><BarChart3 size={14} className="mr-1" />Graphiques</TabsTrigger>
         </TabsList>
 
         <TabsContent value="formateur">
@@ -214,6 +260,112 @@ export default function RecapHeures() {
                 <TableRow key={name}><TableCell>{name}</TableCell><TableCell className="font-bold">{h.toFixed(1)}h</TableCell></TableRow>
               ))}</TableBody></Table>
           </CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="graphiques" data-testid="graphiques-content">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par formateur (top 12)</CardTitle></CardHeader>
+              <CardContent>
+                {chartFormateurs.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart data={chartFormateurs} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={140} />
+                      <ReTooltip formatter={(v) => `${v}h`} />
+                      <Bar dataKey="heures" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="text-sm text-slate-500 py-4">Aucune donnee</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Repartition par type d'activite</CardTitle></CardHeader>
+              <CardContent>
+                {chartTypes.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <PieChart>
+                      <Pie data={chartTypes} cx="50%" cy="50%" outerRadius={100} innerRadius={40} dataKey="value" paddingAngle={2}
+                        label={({ name, value }) => `${name}: ${value}h`} labelLine={true}>
+                        {chartTypes.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                      </Pie>
+                      <ReTooltip formatter={(v) => `${v}h`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <p className="text-sm text-slate-500 py-4">Aucune donnee</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par promotion</CardTitle></CardHeader>
+              <CardContent>
+                {chartPromos.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={chartPromos} margin={{ top: 5, right: 20, left: 0, bottom: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <ReTooltip formatter={(v) => `${v}h`} />
+                      <Bar dataKey="heures" fill="#34D399" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="text-sm text-slate-500 py-4">Aucune donnee</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Evolution par semaine</CardTitle></CardHeader>
+              <CardContent>
+                {chartSemaines.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={chartSemaines} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="semaine" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <ReTooltip formatter={(v) => `${v}h`} />
+                      <Line type="monotone" dataKey="heures" stroke="#F43F5E" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <p className="text-sm text-slate-500 py-4">Aucune donnee</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par UE (top 12)</CardTitle></CardHeader>
+              <CardContent>
+                {chartUes.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart data={chartUes} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={160} />
+                      <ReTooltip formatter={(v) => `${v}h`} />
+                      <Bar dataKey="heures" fill="#A78BFA" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="text-sm text-slate-500 py-4">Aucune donnee</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par semestre</CardTitle></CardHeader>
+              <CardContent>
+                {chartSemestres.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={chartSemestres} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="semestre" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <ReTooltip formatter={(v) => `${v}h`} />
+                      <Bar dataKey="heures" fill="#06B6D4" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="text-sm text-slate-500 py-4">Aucune donnee</p>}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

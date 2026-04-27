@@ -9,7 +9,7 @@ import API from '../lib/api';
 import {
   LayoutDashboard, Calendar, Map, Users, UserCheck, ClipboardList,
   Clock, Settings, AlertTriangle, UserX, StickyNote, LogOut,
-  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key
+  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key, FolderKanban
 } from 'lucide-react';
 
 const consultationLinks = [
@@ -24,6 +24,7 @@ const consultationLinks = [
 
 const coordinationLinks = [
   { to: '/coordination-planning', label: 'Coordination planning', icon: BookOpen },
+  { to: '/coordination', label: 'Coordination · Fiches projet', icon: FolderKanban },
   { to: '/alertes', label: 'Alertes', icon: AlertTriangle },
   { to: '/absences-formateurs', label: 'Absences formateurs', icon: UserX },
   { to: '/pense-betes', label: 'Pense-betes', icon: StickyNote },
