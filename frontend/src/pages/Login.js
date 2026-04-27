@@ -44,7 +44,7 @@ export default function Login() {
       setReqError('Veuillez remplir tous les champs obligatoires'); return;
     }
     if (reqForm.password.length < 6) {
-      setReqError('Le mot de passe doit contenir au moins 6 caracteres'); return;
+      setReqError('Le mot de passe doit contenir au moins 6 caractères'); return;
     }
     if (reqForm.password !== reqForm.password_confirm) {
       setReqError('Les mots de passe ne correspondent pas'); return;
@@ -68,7 +68,7 @@ export default function Login() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-white" style={{ fontFamily: 'Outfit' }}>IFSI Planning</h1>
-            <p className="text-[10px] tracking-[0.2em] text-slate-500 font-medium uppercase">Coordination pedagogique</p>
+            <p className="text-[10px] tracking-[0.2em] text-slate-500 font-medium uppercase">Coordination pédagogique</p>
           </div>
         </div>
 
@@ -82,7 +82,7 @@ export default function Login() {
                     Connexion
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400">
-                    Accedez a l'espace de coordination de votre institut.
+                    Accédez à l'espace de coordination de votre institut.
                   </p>
                 </div>
 
@@ -124,7 +124,7 @@ export default function Login() {
                   <button onClick={() => setShowRequest(true)} type="button"
                     className="text-sm text-slate-500 hover:text-orange-600 dark:hover:text-orange-400 transition-colors inline-flex items-center gap-1.5 font-medium"
                     data-testid="request-access-link">
-                    <Mail size={14} /> Demander un acces
+                    <Mail size={14} /> Demander un accès
                   </button>
                 </div>
               </>
@@ -133,10 +133,10 @@ export default function Login() {
                 <div className="mx-auto w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                   <Check size={28} className="text-green-600" />
                 </div>
-                <h3 className="text-xl font-bold">Demande envoyee</h3>
-                <p className="text-sm text-slate-500">Votre demande d'acces a ete transmise a l'administrateur. Vous recevrez une reponse par email.</p>
+                <h3 className="text-xl font-bold">Demande envoyée</h3>
+                <p className="text-sm text-slate-500">Votre demande d'accès a été transmise à l'administrateur. Vous recevrez une réponse par email.</p>
                 <Button variant="outline" size="sm" onClick={() => { setShowRequest(false); setReqSent(false); setReqForm({ nom: '', prenom: '', email: '', message: '', password: '', password_confirm: '' }); }}>
-                  <ArrowLeft size={14} className="mr-1" /> Retour a la connexion
+                  <ArrowLeft size={14} className="mr-1" /> Retour à la connexion
                 </Button>
               </div>
             ) : (
@@ -145,19 +145,19 @@ export default function Login() {
                   <button type="button" onClick={() => setShowRequest(false)} className="text-slate-400 hover:text-slate-700 transition-colors">
                     <ArrowLeft size={18} />
                   </button>
-                  <h3 className="text-2xl font-bold text-slate-900 dark:text-white" style={{ fontFamily: 'Outfit' }}>Demander un acces</h3>
+                  <h3 className="text-2xl font-bold text-slate-900 dark:text-white" style={{ fontFamily: 'Outfit' }}>Demander un accès</h3>
                 </div>
-                <p className="text-xs text-slate-500 mb-4">Remplissez ce formulaire pour qu'un administrateur cree votre compte.</p>
+                <p className="text-xs text-slate-500 mb-4">Remplissez ce formulaire pour qu'un administrateur crée votre compte.</p>
                 {reqError && (
                   <div className="p-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-xs text-red-600">{reqError}</div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label className="text-xs">Nom *</Label><Input value={reqForm.nom} onChange={e => setReqForm({ ...reqForm, nom: e.target.value })} placeholder="Dupont" className="h-9 text-sm rounded-lg" data-testid="req-nom" /></div>
-                  <div><Label className="text-xs">Prenom *</Label><Input value={reqForm.prenom} onChange={e => setReqForm({ ...reqForm, prenom: e.target.value })} placeholder="Marie" className="h-9 text-sm rounded-lg" data-testid="req-prenom" /></div>
+                  <div><Label className="text-xs">Prénom *</Label><Input value={reqForm.prenom} onChange={e => setReqForm({ ...reqForm, prenom: e.target.value })} placeholder="Marie" className="h-9 text-sm rounded-lg" data-testid="req-prenom" /></div>
                 </div>
                 <div><Label className="text-xs">Email *</Label><Input type="email" value={reqForm.email} onChange={e => setReqForm({ ...reqForm, email: e.target.value })} placeholder="votre@email.fr" className="h-9 text-sm rounded-lg" data-testid="req-email" /></div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label className="text-xs">Mot de passe *</Label><Input type="password" value={reqForm.password} onChange={e => setReqForm({ ...reqForm, password: e.target.value })} placeholder="Min. 6 caracteres" className="h-9 text-sm rounded-lg" data-testid="req-password" /></div>
+                  <div><Label className="text-xs">Mot de passe *</Label><Input type="password" value={reqForm.password} onChange={e => setReqForm({ ...reqForm, password: e.target.value })} placeholder="Min. 6 caractères" className="h-9 text-sm rounded-lg" data-testid="req-password" /></div>
                   <div><Label className="text-xs">Confirmer *</Label><Input type="password" value={reqForm.password_confirm} onChange={e => setReqForm({ ...reqForm, password_confirm: e.target.value })} placeholder="Confirmer" className="h-9 text-sm rounded-lg" data-testid="req-password-confirm" /></div>
                 </div>
                 <div>
@@ -177,7 +177,7 @@ export default function Login() {
         {/* Comptes démo */}
         {!showRequest && (
           <div className="text-[11px] text-slate-400 leading-relaxed animate-fadeIn" style={{ animationDelay: '300ms' }}>
-            <p className="font-semibold text-slate-500 mb-1">Comptes de demonstration disponibles :</p>
+            <p className="font-semibold text-slate-500 mb-1">Comptes de démonstration disponibles :</p>
             <p><span className="font-mono">admin@ifsi.fr</span> · <span className="font-mono">Admin123!</span></p>
           </div>
         )}
@@ -200,7 +200,7 @@ export default function Login() {
             Planification <span className="text-orange-300">IFSI Chuga.</span>
           </h2>
           <p className="text-sm xl:text-base text-white/80 max-w-xl leading-relaxed">
-            Planifie, gere les semestres et construis.
+            Planifie, gère les semestres et construis.
           </p>
         </div>
       </div>
