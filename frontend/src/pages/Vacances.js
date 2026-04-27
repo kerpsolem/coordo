@@ -46,22 +46,33 @@ export default function Vacances() {
   const promoMap = Object.fromEntries(promotions.map(p => [p.id, p]));
 
   const startNew = () => {
-    setEditItem({ nom: '', promotion_id: '', date_debut: '', date_fin: '' });
+    setEditItem({ nom: '', promotion_ids: [], date_debut: '', date_fin: '' });
     setShowDialog(true);
   };
 
-  const startEdit = (v) => { setEditItem({ ...v }); setShowDialog(true); };
+  const startEdit = (v) => { setEditItem({ ...v, promotion_ids: [v.promotion_id] }); setShowDialog(true); };
 
   const save = async () => {
-    if (!editItem.promotion_id || !editItem.date_debut || !editItem.date_fin || !editItem.nom) {
-      alert('Tous les champs sont obligatoires.'); return;
+    const ids = editItem.id ? [editItem.promotion_ids?.[0] || editItem.promotion_id] : (editItem.promotion_ids || []);
+    if (!ids.length || !editItem.date_debut || !editItem.date_fin || !editItem.nom) {
+      alert('Tous les champs sont obligatoires (au moins 1 promotion).'); return;
     }
     if (editItem.date_fin < editItem.date_debut) {
       alert('Date de fin avant date de debut.'); return;
     }
     try {
-      if (editItem.id) await API.put(`/vacances/${editItem.id}`, editItem);
-      else await API.post('/vacances', editItem);
+      if (editItem.id) {
+        await API.put(`/vacances/${editItem.id}`, {
+          nom: editItem.nom, promotion_id: ids[0],
+          date_debut: editItem.date_debut, date_fin: editItem.date_fin,
+        });
+      } else {
+        // Create one record per selected promotion
+        await Promise.all(ids.map(pid => API.post('/vacances', {
+          nom: editItem.nom, promotion_id: pid,
+          date_debut: editItem.date_debut, date_fin: editItem.date_fin,
+        })));
+      }
       setShowDialog(false); load();
     } catch (e) { console.error(e); alert('Erreur lors de l\'enregistrement'); }
   };
@@ -160,11 +171,43 @@ export default function Vacances() {
           {editItem && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs">Promotion *</Label>
-                <Select value={editItem.promotion_id} onValueChange={v => setEditItem({ ...editItem, promotion_id: v })}>
-                  <SelectTrigger className="h-9 text-sm" data-testid="vacance-promo"><SelectValue placeholder="Choisir" /></SelectTrigger>
-                  <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent>
-                </Select>
+                <Label className="text-xs">Promotion(s) *</Label>
+                {editItem.id ? (
+                  <Select value={editItem.promotion_ids?.[0] || editItem.promotion_id || ''} onValueChange={v => setEditItem({ ...editItem, promotion_ids: [v], promotion_id: v })}>
+                    <SelectTrigger className="h-9 text-sm" data-testid="vacance-promo"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                    <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : (
+                  <div className="border rounded p-2 space-y-1 max-h-40 overflow-y-auto" data-testid="vacance-promo">
+                    <label className="flex items-center gap-2 text-xs font-medium border-b pb-1 mb-1 cursor-pointer">
+                      <input type="checkbox"
+                        checked={(editItem.promotion_ids || []).length === promotions.length && promotions.length > 0}
+                        onChange={e => setEditItem({ ...editItem, promotion_ids: e.target.checked ? promotions.map(p => p.id) : [] })} />
+                      <span>Toutes les promotions</span>
+                    </label>
+                    {promotions.map(p => {
+                      const ids = editItem.promotion_ids || [];
+                      const checked = ids.includes(p.id);
+                      return (
+                        <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input type="checkbox" checked={checked}
+                            onChange={e => setEditItem({
+                              ...editItem,
+                              promotion_ids: e.target.checked ? [...ids, p.id] : ids.filter(i => i !== p.id)
+                            })}
+                            data-testid={`vacance-promo-${p.id}`}
+                          />
+                          <span>{p.nom}{p.annee_entree ? ` (${p.annee_entree}-${p.annee_sortie})` : ''}</span>
+                        </label>
+                      );
+                    })}
+                    {(editItem.promotion_ids || []).length > 0 && (
+                      <p className="text-[10px] text-orange-600 font-medium pt-1 border-t">
+                        {editItem.promotion_ids.length} promotion(s) selectionnee(s) - 1 periode sera creee par promotion
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <Label className="text-xs">Nom *</Label>
