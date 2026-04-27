@@ -406,7 +406,7 @@ export default function PlanningGlobal() {
             {days.map((day, di) => {
               const dayStr = format(day, 'yyyy-MM-dd');
               const ferie = holidayMap[dayStr];
-              const vacanceNom = vacancesByPromo[promo.id]?.[dayStr];
+              const vacanceNom = vacancesByPromo[promoId]?.[dayStr];
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
               return (
                 <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''}`} style={{ height: GRID_H }}
