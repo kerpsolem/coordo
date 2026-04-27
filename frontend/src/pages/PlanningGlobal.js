@@ -87,13 +87,16 @@ export default function PlanningGlobal() {
   const isHoliday = (dayStr) => !!holidayMap[dayStr];
   const getAbsForDay = (dayStr) => {
     const dayAbs = absences.filter(a => a.date === dayStr);
-    return dayAbs.map(a => {
-      const init = a.formateur_initiales || '?';
-      const per = a.periode || (a.journee_entiere ? 'journee' : 'journee');
-      if (per === 'matin') return `${init} (AM)`;
-      if (per === 'apres_midi') return `${init} (PM)`;
-      return `${init} (J)`;
-    });
+    return dayAbs.map(a => ({
+      init: a.formateur_initiales || '?',
+      periode: a.periode || (a.journee_entiere ? 'journee' : 'journee'),
+    }));
+  };
+
+  const ABS_STYLE = {
+    journee: { bg: 'bg-red-100 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-300', label: 'J' },
+    matin: { bg: 'bg-amber-100 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', label: 'AM' },
+    apres_midi: { bg: 'bg-sky-100 dark:bg-sky-900/40', text: 'text-sky-700 dark:text-sky-300', label: 'PM' },
   };
 
   const startEdit = (s) => { setHoveredSession(null); setEditSession({ ...s, formateur_ids: s.formateur_ids || [] }); setShowDialog(true); };
@@ -350,8 +353,16 @@ export default function PlanningGlobal() {
                     </div>
                   )}
                   {dayAbs.length > 0 && (
-                    <div className="bg-red-50 dark:bg-red-950/30 border-t border-red-200 dark:border-red-800 px-1 py-0.5 text-red-600 font-medium" style={{ fontSize: baseFontSmall - 1 }}>
-                      Abs: {dayAbs.join(', ')}
+                    <div className="border-t border-slate-200 dark:border-slate-700 px-1 py-1 flex flex-wrap gap-0.5 justify-center" style={{ fontSize: baseFontSmall - 1 }}>
+                      {dayAbs.map((ab, k) => {
+                        const st = ABS_STYLE[ab.periode] || ABS_STYLE.journee;
+                        return (
+                          <span key={k} className={`inline-flex items-center gap-0.5 rounded ${st.bg} px-1 py-0`}>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">{ab.init}</span>
+                            <span className={`font-bold ${st.text}`}>{st.label}</span>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
