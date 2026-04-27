@@ -193,15 +193,14 @@ export default function Login() {
         <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-slate-900/85 via-slate-900/40 to-transparent" />
         {/* Texte d'accroche */}
         <div className="absolute inset-x-0 bottom-0 p-10 lg:p-14 text-white z-10 animate-slideUp" style={{ animationDelay: '180ms' }}>
-          <span className="inline-block text-[10px] tracking-[0.25em] font-bold text-orange-300 mb-3 px-2.5 py-1 rounded-full border border-orange-300/40 bg-orange-500/10 backdrop-blur-sm uppercase">
+          <span className="inline-block text-[10px] tracking-[0.25em] font-bold text-slate-900 mb-3 px-2.5 py-1 rounded-full border border-slate-900/20 bg-white/90 backdrop-blur-sm uppercase shadow-sm">
             Institut de formation en soins infirmiers
           </span>
           <h2 className="text-3xl xl:text-5xl font-bold leading-tight mb-3" style={{ fontFamily: 'Outfit' }}>
-            Orchestrer la pedagogie,<br />
-            <span className="text-orange-300">simplifier la coordination.</span>
+            Planification <span className="text-orange-300">IFSI Chuga.</span>
           </h2>
           <p className="text-sm xl:text-base text-white/80 max-w-xl leading-relaxed">
-            Planifiez les UE, gerez les semestres et construisez les fiches projet de chaque promotion en toute serenite.
+            Planifie, gere les semestres et construis.
           </p>
         </div>
       </div>
