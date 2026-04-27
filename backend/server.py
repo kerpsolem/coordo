@@ -912,6 +912,85 @@ async def fiches_a_programmer(request: Request, promotion_id: Optional[str] = No
     result.sort(key=lambda x: (x["ue_id"], x["ordre"]))
     return result
 
+@api_router.post("/fiches-projet/import-sessions")
+async def import_sessions_to_fiches(request: Request):
+    """
+    Recupere toutes les sessions deja programmees et les ajoute comme activites
+    dans les fiches projet correspondantes (par ue_id + semestre + promotion_id).
+    Cree la fiche manquante si necessaire. Ne re-cree pas une activite deja liee
+    (idempotent grace a session_id).
+    """
+    await require_admin(request)
+    sessions = await db.sessions.find({"ue_id": {"$exists": True, "$ne": ""}}, {"_id": 0}).to_list(5000)
+    fiches = await db.fiches_projet.find({}, {"_id": 0}).to_list(2000)
+
+    # Index existing activity session_ids across all fiches
+    linked_session_ids = set()
+    fiche_index = {}  # (ue_id, semestre, promotion_id) -> fiche
+    for f in fiches:
+        for act in f.get("activites", []):
+            if act.get("session_id"):
+                linked_session_ids.add(act["session_id"])
+        key = (f.get("ue_id"), f.get("semestre", ""), f.get("promotion_id", ""))
+        fiche_index[key] = f
+
+    created_fiches = 0
+    added_activites = 0
+    skipped = 0
+
+    for s in sessions:
+        if s.get("id") in linked_session_ids:
+            skipped += 1
+            continue
+        ue_id = s.get("ue_id")
+        if not ue_id:
+            skipped += 1
+            continue
+        sem = s.get("semestre") or ""
+        promo = s.get("promotion_id") or ""
+        key = (ue_id, sem, promo)
+
+        fiche = fiche_index.get(key)
+        if not fiche:
+            # Try fallback: same UE + semestre, no promotion
+            fiche = fiche_index.get((ue_id, sem, "")) or fiche_index.get((ue_id, "", ""))
+
+        if not fiche:
+            fiche = {
+                "id": str(uuid.uuid4()),
+                "ue_id": ue_id,
+                "semestre": sem,
+                "promotion_id": promo,
+                "activites": [],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "auto_imported": True,
+            }
+            await db.fiches_projet.insert_one(fiche)
+            fiche_index[key] = fiche
+            created_fiches += 1
+
+        new_act = {
+            "id": str(uuid.uuid4()),
+            "nom": s.get("intitule") or "(sans intitule)",
+            "heures": s.get("duree", 0),
+            "promotion_id": promo,
+            "taille_groupe": "demi_promo" if s.get("group_id") else "promo_entiere",
+            "ordre": len(fiche.get("activites", [])),
+            "type_activite_id": s.get("type_activite_id") or "",
+            "session_id": s.get("id"),
+        }
+        fiche.setdefault("activites", []).append(new_act)
+        await db.fiches_projet.update_one({"id": fiche["id"]}, {"$set": {"activites": fiche["activites"]}})
+        linked_session_ids.add(s["id"])
+        added_activites += 1
+
+    return {
+        "sessions_total": len(sessions),
+        "fiches_created": created_fiches,
+        "activites_added": added_activites,
+        "skipped": skipped,
+    }
+
 @api_router.post("/fiches-projet/clone-promotion")
 async def clone_fiches_promotion(request: Request):
     """

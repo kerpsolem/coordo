@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown, Download, Copy } from 'lucide-react';
+import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown, Download, Copy, RefreshCw } from 'lucide-react';
 
 const TAILLES = [
   { value: 'promo_entiere', label: 'Promotion entiere' },
@@ -87,6 +87,15 @@ export default function Coordination() {
     } catch (e) { console.error(e); alert('Erreur lors de l\'import'); }
   };
 
+  const importSessions = async () => {
+    if (!window.confirm('Recuperer toutes les seances deja programmees et les ajouter dans les fiches projet correspondantes ?')) return;
+    try {
+      const { data } = await API.post('/fiches-projet/import-sessions');
+      alert(`Import termine :\n- ${data.activites_added} activite(s) ajoutee(s)\n- ${data.fiches_created} fiche(s) cree(s)\n- ${data.skipped} deja presente(s)\nSur ${data.sessions_total} seance(s) au total.`);
+      load();
+    } catch (e) { console.error(e); alert('Erreur lors de l\'import des seances'); }
+  };
+
   const runClone = async () => {
     if (!cloneForm.source_promotion_id || !cloneForm.target_promotion_id) {
       alert('Selectionnez la promotion source et cible.');
@@ -148,6 +157,7 @@ export default function Coordination() {
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Coordination · Fiches projet</h1>
         {isAdmin && (
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={importSessions} data-testid="import-sessions-btn"><RefreshCw size={14} className="mr-1" /> Recuperer seances programmees</Button>
             <Button variant="outline" size="sm" onClick={() => setShowCloneDialog(true)} data-testid="clone-promo-btn"><Copy size={14} className="mr-1" /> Cloner depuis annee precedente</Button>
             <Button variant="outline" size="sm" onClick={importUEs} data-testid="import-ues-btn"><Download size={14} className="mr-1" /> Importer toutes les UE</Button>
             <Button size="sm" onClick={startNew} data-testid="new-fiche-btn"><Plus size={14} className="mr-1" /> Nouvelle fiche</Button>
