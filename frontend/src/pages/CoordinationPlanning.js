@@ -90,10 +90,16 @@ export default function CoordinationPlanning() {
     } catch (e) { console.error(e); }
   };
 
+  const [confirmDelId, setConfirmDelId] = useState(null);
   const deleteSession = async (id) => {
-    if (!window.confirm('Supprimer cette seance ?')) return;
+    if (confirmDelId !== id) {
+      setConfirmDelId(id);
+      setTimeout(() => setConfirmDelId(c => c === id ? null : c), 4000);
+      return;
+    }
     try {
       await API.delete(`/sessions/${id}`);
+      setConfirmDelId(null);
       loadData();
     } catch (e) {
       console.error('Delete failed:', e);
@@ -219,7 +225,11 @@ export default function CoordinationPlanning() {
                       <div className="flex gap-1">
                         {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => startEdit(s)}><Edit2 size={12} /></Button>}
                         {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => duplicateSession(s.id)}><Copy size={12} /></Button>}
-                        {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteSession(s.id)}><Trash2 size={12} /></Button>}
+                        {canEdit && (confirmDelId === s.id ? (
+                          <Button variant="destructive" size="sm" className="h-6 px-2 text-[10px] font-bold" onClick={() => deleteSession(s.id)} data-testid={`confirm-del-${s.id}`}>OK?</Button>
+                        ) : (
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:bg-red-100" onClick={() => deleteSession(s.id)} title="Supprimer (cliquer 2x)" data-testid={`del-${s.id}`}><Trash2 size={12} /></Button>
+                        ))}
                       </div>
                     </TableCell>
                   )}

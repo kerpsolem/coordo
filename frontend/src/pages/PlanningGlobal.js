@@ -160,7 +160,24 @@ export default function PlanningGlobal() {
     } catch (e) { console.error(e); }
   };
   const duplicateSession = async (id) => { try { await API.post(`/sessions/${id}/duplicate`); loadData(); } catch (e) { console.error(e); } };
-  const deleteSession = async (id) => { if (!window.confirm('Supprimer cette seance ?')) return; try { await API.delete(`/sessions/${id}`); setShowDialog(false); loadData(); } catch (e) { console.error(e); } };
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteSession = async (id) => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      setTimeout(() => setConfirmDelete(false), 4000);
+      return;
+    }
+    try {
+      await API.delete(`/sessions/${id}`);
+      setShowDialog(false);
+      setConfirmDelete(false);
+      loadData();
+    } catch (e) {
+      console.error('Delete failed:', e);
+      const detail = e.response?.data?.detail || e.message || 'Erreur inconnue';
+      alert(`Suppression impossible : ${detail}`);
+    }
+  };
   const toggleField = async (id, field, value) => { try { await API.patch(`/sessions/${id}/toggle`, { field, value }); loadData(); } catch (e) { console.error(e); } };
 
   // ---- MOVE/RESIZE existing sessions ----
@@ -603,7 +620,9 @@ export default function PlanningGlobal() {
               <div className="col-span-2 flex justify-between pt-2 border-t">
                 <div className="flex gap-2">{editSession.id&&(<>
                   <Button variant="outline" size="sm" className="text-xs" onClick={()=>duplicateSession(editSession.id)}>Dupliquer</Button>
-                  <Button variant="destructive" size="sm" className="text-xs" onClick={()=>deleteSession(editSession.id)}>Supprimer</Button></>)}</div>
+                  <Button variant="destructive" size="sm" className={`text-xs ${confirmDelete ? 'animate-pulse ring-2 ring-red-500' : ''}`} onClick={()=>deleteSession(editSession.id)} data-testid="del-session">
+                    {confirmDelete ? 'Confirmer la suppression ?' : 'Supprimer'}
+                  </Button></>)}</div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={()=>setShowDialog(false)}>Annuler</Button>
                   <Button size="sm" className="text-xs" onClick={saveSession} data-testid="save-session">Enregistrer</Button></div></div>
