@@ -24,6 +24,7 @@ export default function PlanningGlobal() {
   const [sessions, setSessions] = useState([]);
   const [absences, setAbsences] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [vacances, setVacances] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [formateurs, setFormateurs] = useState([]);
   const [actTypes, setActTypes] = useState([]);
@@ -63,13 +64,16 @@ export default function PlanningGlobal() {
     if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
-      const [sessR, absR, holR, proR, fmR, atR, ueR, domR, sitR, grpR] = await Promise.all([
+      const [sessR, absR, holR, vacR, proR, fmR, atR, ueR, domR, sitR, grpR] = await Promise.all([
         API.get('/sessions', { params }), API.get('/absences/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/holidays', { params: { date_debut: dateDebut, date_fin: dateFin } }),
+        API.get('/vacances/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/promotions'), API.get('/formateurs'), API.get('/activity-types'),
         API.get('/ues'), API.get('/domains'), API.get('/sites'), API.get('/groups')
       ]);
-      setSessions(sessR.data); setAbsences(absR.data); setHolidays(holR.data); setPromotions(proR.data); setFormateurs(fmR.data);
+      setSessions(sessR.data); setAbsences(absR.data); setHolidays(holR.data);
+      setVacances(vacR.data);
+      setPromotions(proR.data); setFormateurs(fmR.data);
       setActTypes(atR.data); setUes(ueR.data); setDomains(domR.data); setSites(sitR.data); setGroups(grpR.data);
     } catch (e) { console.error(e); }
   }, [currentDate, selectedPromos, filterSemestre]);
@@ -85,6 +89,12 @@ export default function PlanningGlobal() {
   const displayPromos = selectedPromos.size === 0 ? promotions : promotions.filter(p => selectedPromos.has(p.id));
   const holidayMap = Object.fromEntries(holidays.map(h => [h.date, h.nom]));
   const isHoliday = (dayStr) => !!holidayMap[dayStr];
+  // Vacances groupees par promotion : { [promo_id]: { [date]: nom } }
+  const vacancesByPromo = vacances.reduce((acc, v) => {
+    if (!acc[v.promotion_id]) acc[v.promotion_id] = {};
+    acc[v.promotion_id][v.date] = v.nom;
+    return acc;
+  }, {});
   const getAbsForDay = (dayStr) => {
     const dayAbs = absences.filter(a => a.date === dayStr);
     return dayAbs.map(a => ({
@@ -396,11 +406,19 @@ export default function PlanningGlobal() {
             {days.map((day, di) => {
               const dayStr = format(day, 'yyyy-MM-dd');
               const ferie = holidayMap[dayStr];
+              const vacanceNom = vacancesByPromo[promo.id]?.[dayStr];
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
               return (
-                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''}`} style={{ height: GRID_H }}
+                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''}`} style={{ height: GRID_H }}
                   data-day={dayStr}
                   onMouseDown={(e) => handleGridMouseDown(e, dayStr)}>
+                  {vacanceNom && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                      <span className="text-orange-600 font-bold text-xs uppercase tracking-wide bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded shadow-sm">
+                        {vacanceNom}
+                      </span>
+                    </div>
+                  )}
                   {Array.from({ length: 11 }, (_, i) => 8 + i).map(h => (
                     <div key={h} className="absolute w-full border-t border-slate-100 dark:border-slate-800/50" style={{ top: (h * 60 - START_MIN) * PX_PER_MIN }} />
                   ))}

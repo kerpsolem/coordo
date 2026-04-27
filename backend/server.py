@@ -930,6 +930,64 @@ async def fiches_a_programmer(request: Request, promotion_id: Optional[str] = No
     result.sort(key=lambda x: (x["ue_id"], x["ordre"]))
     return result
 
+# ===================== VACANCES PAR PROMOTION =====================
+@api_router.get("/vacances")
+async def list_vacances(request: Request, promotion_id: Optional[str] = None):
+    await get_user(request)
+    q = {}
+    if promotion_id:
+        q["promotion_id"] = promotion_id
+    return await crud_list("vacances_periodes", q, sort=[("date_debut", 1)])
+
+@api_router.post("/vacances")
+async def create_vacance(request: Request):
+    await require_admin(request)
+    return await crud_create("vacances_periodes", await request.json())
+
+@api_router.put("/vacances/{id}")
+async def update_vacance(id: str, request: Request):
+    await require_admin(request)
+    return await crud_update("vacances_periodes", id, await request.json())
+
+@api_router.delete("/vacances/{id}")
+async def delete_vacance(id: str, request: Request):
+    await require_admin(request)
+    return await crud_delete("vacances_periodes", id)
+
+@api_router.get("/vacances/for-period")
+async def vacances_for_period(date_debut: str, date_fin: str, promotion_id: Optional[str] = None):
+    """Retourne les jours de vacances pour la periode + promotion (optionnel)."""
+    q = {"date_fin": {"$gte": date_debut}, "date_debut": {"$lte": date_fin}}
+    if promotion_id:
+        q["promotion_id"] = promotion_id
+    periodes = await db.vacances_periodes.find(q, {"_id": 0}).to_list(2000)
+    promotions = {p["id"]: p for p in await crud_list("promotions")}
+    result = []
+    try:
+        d_start = date.fromisoformat(date_debut)
+        d_end = date.fromisoformat(date_fin)
+    except:
+        raise HTTPException(400, "Format de date invalide")
+    for v in periodes:
+        try:
+            v_start = date.fromisoformat(v.get("date_debut"))
+            v_end = date.fromisoformat(v.get("date_fin"))
+        except:
+            continue
+        cur = max(d_start, v_start)
+        end = min(d_end, v_end)
+        promo = promotions.get(v.get("promotion_id"), {})
+        while cur <= end:
+            result.append({
+                "date": cur.isoformat(),
+                "promotion_id": v.get("promotion_id"),
+                "promotion_nom": promo.get("nom", ""),
+                "nom": v.get("nom", "Vacances"),
+                "vacance_id": v.get("id"),
+            })
+            cur += timedelta(days=1)
+    return result
+
 @api_router.post("/fiches-projet/import-sessions")
 async def import_sessions_to_fiches(request: Request):
     """
