@@ -463,6 +463,7 @@ async def absences_for_period(date_debut: str, date_fin: str):
                         "formateur_initiales": f.get("initiales", ""),
                         "date": current.isoformat(),
                         "journee_entiere": ab.get("journee_entiere", True),
+                        "periode": ab.get("periode") or ("journee" if ab.get("journee_entiere", True) else "matin"),
                         "recurrence": True,
                         "absence_id": ab.get("id")
                     })
@@ -479,6 +480,7 @@ async def absences_for_period(date_debut: str, date_fin: str):
                     "formateur_initiales": f.get("initiales", ""),
                     "date": current.isoformat(),
                     "journee_entiere": ab.get("journee_entiere", True),
+                    "periode": ab.get("periode") or ("journee" if ab.get("journee_entiere", True) else "matin"),
                     "recurrence": False,
                     "absence_id": ab.get("id")
                 })
