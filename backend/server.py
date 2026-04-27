@@ -893,6 +893,30 @@ async def fiches_a_programmer(request: Request, promotion_id: Optional[str] = No
     result.sort(key=lambda x: (x["ue_id"], x["ordre"]))
     return result
 
+@api_router.post("/fiches-projet/import-ues")
+async def import_ues_to_fiches(request: Request):
+    """Crée une fiche projet vide pour chaque UE qui n'en a pas encore."""
+    await require_admin(request)
+    ues = await db.ues.find({}, {"_id": 0}).to_list(2000)
+    existing = await db.fiches_projet.find({}, {"_id": 0, "ue_id": 1}).to_list(2000)
+    existing_ue_ids = {f.get("ue_id") for f in existing if f.get("ue_id")}
+    created = []
+    for ue in ues:
+        if ue["id"] in existing_ue_ids:
+            continue
+        fiche = {
+            "id": str(uuid.uuid4()),
+            "ue_id": ue["id"],
+            "semestre": ue.get("semestre", ""),
+            "promotion_id": "",
+            "activites": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "auto_imported": True,
+        }
+        await db.fiches_projet.insert_one(fiche)
+        created.append({k: v for k, v in fiche.items() if k != "_id"})
+    return {"created": len(created), "skipped": len(ues) - len(created), "total_ues": len(ues)}
+
 @api_router.post("/fiches-projet")
 async def create_fiche_projet(request: Request):
     await require_admin(request)

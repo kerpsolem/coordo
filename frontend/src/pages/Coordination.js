@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown, Download } from 'lucide-react';
 
 const TAILLES = [
   { value: 'promo_entiere', label: 'Promotion entiere' },
@@ -75,6 +75,15 @@ export default function Coordination() {
     try { await API.delete(`/fiches-projet/${id}`); load(); } catch (e) { console.error(e); }
   };
 
+  const importUEs = async () => {
+    if (!window.confirm('Creer automatiquement une fiche projet vide pour chaque UE qui n\'en a pas encore ?')) return;
+    try {
+      const { data } = await API.post('/fiches-projet/import-ues');
+      alert(`Import termine : ${data.created} fiche(s) cree(s), ${data.skipped} deja existante(s).`);
+      load();
+    } catch (e) { console.error(e); alert('Erreur lors de l\'import'); }
+  };
+
   const addActivite = () => {
     const next = (editFiche.activites || []).length;
     setEditFiche({
@@ -111,7 +120,12 @@ export default function Coordination() {
     <div className="space-y-4" data-testid="coordination-page">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Coordination · Fiches projet</h1>
-        {isAdmin && <Button size="sm" onClick={startNew} data-testid="new-fiche-btn"><Plus size={14} className="mr-1" /> Nouvelle fiche</Button>}
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={importUEs} data-testid="import-ues-btn"><Download size={14} className="mr-1" /> Importer toutes les UE</Button>
+            <Button size="sm" onClick={startNew} data-testid="new-fiche-btn"><Plus size={14} className="mr-1" /> Nouvelle fiche</Button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
