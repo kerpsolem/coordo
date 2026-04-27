@@ -90,9 +90,9 @@ export default function PlanningGlobal() {
     return dayAbs.map(a => {
       const init = a.formateur_initiales || '?';
       const per = a.periode || (a.journee_entiere ? 'journee' : 'journee');
-      if (per === 'matin') return `${init} (matin)`;
-      if (per === 'apres_midi') return `${init} (apres-midi)`;
-      return init;
+      if (per === 'matin') return `${init} (AM)`;
+      if (per === 'apres_midi') return `${init} (PM)`;
+      return `${init} (J)`;
     });
   };
 

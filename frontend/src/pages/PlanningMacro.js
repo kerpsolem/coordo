@@ -143,7 +143,7 @@ export default function PlanningMacro() {
 
   const handleDragOver = (e, weekStart) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = dragActivite ? 'copy' : 'move';
     setDragOverWeek(format(weekStart, 'yyyy-MM-dd'));
   };
 
@@ -298,7 +298,11 @@ export default function PlanningMacro() {
                         return (
                           <div key={a.activite_id}
                             draggable={isAdmin}
-                            onDragStart={(e) => { setDragActivite(a); e.dataTransfer.effectAllowed = 'copy'; }}
+                            onDragStart={(e) => {
+                              setDragActivite(a);
+                              e.dataTransfer.effectAllowed = 'copyMove';
+                              e.dataTransfer.setData('text/plain', a.activite_id);
+                            }}
                             onDragEnd={handleDragEnd}
                             className="px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-violet-400 cursor-grab active:cursor-grabbing"
                             data-testid={`a-prog-${a.activite_id}`}>
@@ -375,7 +379,9 @@ export default function PlanningMacro() {
                             {weeks.map((w, wi) => {
                               const weekSess = getSessionsForWeek(w).filter(s => s.ue_id === ue.id);
                               const weekKey = format(w, 'yyyy-MM-dd');
-                              const isDropTarget = dragOverWeek === weekKey && dragSession?.ue_id === ue.id;
+                              const isDropTarget = dragOverWeek === weekKey && (
+                                (dragSession?.ue_id === ue.id) || (dragActivite?.ue_id === ue.id)
+                              );
                               return (
                                 <div key={wi}
                                   className={`flex-1 p-0.5 border-r border-slate-50 dark:border-slate-800/50 cursor-pointer relative transition-colors
@@ -446,6 +452,11 @@ export default function PlanningMacro() {
       {dragSession && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium">
           Deplacez vers une autre semaine puis validez
+        </div>
+      )}
+      {dragActivite && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] bg-violet-600 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium">
+          Glissez "{dragActivite.nom}" sur une semaine du planning
         </div>
       )}
 
