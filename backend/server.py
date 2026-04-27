@@ -455,12 +455,20 @@ async def absences_for_period(date_debut: str, date_fin: str):
             jours = [day_map.get(j.lower(), -1) for j in ab.get("jours_recurrence", [])]
             type_rec = (ab.get("type_recurrence") or "hebdomadaire").lower()
             step_weeks = 2 if type_rec in ("bimensuelle", "bi-mensuelle", "bimensuel", "bi_mensuelle") else 1
+            parite = (ab.get("parite_semaine") or "").lower()  # '', 'paire', 'impaire'
             current = d_start
             while current <= min(d_end, rec_end):
                 if current.weekday() in jours and current >= ab_start:
                     # For bi-weekly: include only if (current - ab_start).days // 7 is even
                     if step_weeks == 1:
                         ok = True
+                    elif parite in ("paire", "impaire"):
+                        # Use ISO week parity directly (semaines paires/impaires)
+                        iso_week = current.isocalendar()[1]
+                        if parite == "paire":
+                            ok = (iso_week % 2 == 0)
+                        else:
+                            ok = (iso_week % 2 == 1)
                     else:
                         # Anchor on the first matching weekday at/after ab_start
                         anchor = ab_start

@@ -17,16 +17,25 @@ export default function Alertes() {
   const [showInfo, setShowInfo] = useState(true);
 
   // Period filter
-  const [periodMode, setPeriodMode] = useState('custom'); // semestre | annee_scolaire | custom
+  const [periodMode, setPeriodMode] = useState('annee_scolaire'); // semestre | annee_scolaire | custom (default = annee_scolaire)
   const [filterSemestre, setFilterSemestre] = useState('');
   const [filterAnneeSco, setFilterAnneeSco] = useState('');
   const [schoolYears, setSchoolYears] = useState([]);
 
-  // Load school years once
+  // Load school years once + auto-select the one covering today
   useEffect(() => {
     (async () => {
-      try { const { data } = await API.get('/school-years'); setSchoolYears(data); } catch (e) { console.error(e); }
+      try {
+        const { data } = await API.get('/school-years');
+        setSchoolYears(data);
+        if (data.length && !filterAnneeSco) {
+          const today = new Date().toISOString().slice(0, 10);
+          const current = data.find(sy => sy.date_debut && sy.date_fin && sy.date_debut <= today && today <= sy.date_fin);
+          setFilterAnneeSco((current || data[0]).id);
+        }
+      } catch (e) { console.error(e); }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Default custom range

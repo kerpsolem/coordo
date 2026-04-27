@@ -221,6 +221,19 @@ export default function AbsencesFormateurs() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {editItem.type_recurrence === 'bimensuelle' && (
+                    <div>
+                      <Label>Parite des semaines (optionnel)</Label>
+                      <Select value={editItem.parite_semaine || 'auto'} onValueChange={v => setEditItem({ ...editItem, parite_semaine: v === 'auto' ? '' : v })}>
+                        <SelectTrigger data-testid="absence-parite"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Automatique (toutes les 2 semaines depuis date debut)</SelectItem>
+                          <SelectItem value="paire">Semaines paires uniquement</SelectItem>
+                          <SelectItem value="impaire">Semaines impaires uniquement</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label>Jours concernes</Label>
                     <div className="flex flex-wrap gap-2 mt-1">
