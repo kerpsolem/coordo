@@ -430,6 +430,25 @@ export default function PlanningGlobal() {
           <Button variant="outline" size="sm" onClick={prevWeek} data-testid="prev-week"><ChevronLeft size={16} /></Button>
           <span className="text-sm font-semibold px-2"><span className="font-bold text-base">S{weekNum}</span> - {format(days[0], "d MMM", { locale: fr })} au {format(days[4], "d MMM yyyy", { locale: fr })}</span>
           <Button variant="outline" size="sm" onClick={nextWeek} data-testid="next-week"><ChevronRight size={16} /></Button>
+          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
+          <Input type="date" value={format(currentDate, 'yyyy-MM-dd')}
+            onChange={e => e.target.value && setCurrentDate(new Date(e.target.value + 'T00:00:00'))}
+            className="h-8 w-36 text-xs" data-testid="date-picker" title="Aller a une date" />
+          <Select value={String(weekNum)} onValueChange={v => {
+            const w = Number(v);
+            const year = currentDate.getFullYear();
+            const jan1 = new Date(year, 0, 1);
+            const target = addWeeks(startOfWeek(jan1, { weekStartsOn: 1 }), w - 1);
+            setCurrentDate(target);
+          }}>
+            <SelectTrigger className="h-8 w-20 text-xs" data-testid="week-picker"><SelectValue placeholder={`S${weekNum}`} /></SelectTrigger>
+            <SelectContent className="max-h-72">
+              {Array.from({ length: 52 }, (_, i) => i + 1).map(w => (
+                <SelectItem key={w} value={String(w)}>S{w}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCurrentDate(new Date())} data-testid="today-btn">Aujourd'hui</Button>
         </div>
       </div>
 
