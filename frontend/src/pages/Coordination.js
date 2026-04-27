@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown, Download } from 'lucide-react';
+import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown, Download, Copy } from 'lucide-react';
 
 const TAILLES = [
   { value: 'promo_entiere', label: 'Promotion entiere' },
@@ -26,6 +26,9 @@ export default function Coordination() {
   const [filterPromo, setFilterPromo] = useState('all');
   const [editFiche, setEditFiche] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
+  const [showCloneDialog, setShowCloneDialog] = useState(false);
+  const [cloneForm, setCloneForm] = useState({ source_promotion_id: '', target_promotion_id: '', replace_existing: false });
+  const [cloneLoading, setCloneLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +87,29 @@ export default function Coordination() {
     } catch (e) { console.error(e); alert('Erreur lors de l\'import'); }
   };
 
+  const runClone = async () => {
+    if (!cloneForm.source_promotion_id || !cloneForm.target_promotion_id) {
+      alert('Selectionnez la promotion source et cible.');
+      return;
+    }
+    if (cloneForm.source_promotion_id === cloneForm.target_promotion_id) {
+      alert('La promotion source et cible doivent etre differentes.');
+      return;
+    }
+    setCloneLoading(true);
+    try {
+      const { data } = await API.post('/fiches-projet/clone-promotion', cloneForm);
+      alert(`Clonage termine : ${data.cloned} fiche(s) clonee(s), ${data.skipped} ignoree(s) (deja presente(s) sur la cible).`);
+      setShowCloneDialog(false);
+      setCloneForm({ source_promotion_id: '', target_promotion_id: '', replace_existing: false });
+      load();
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.detail || 'Erreur lors du clonage');
+    }
+    setCloneLoading(false);
+  };
+
   const addActivite = () => {
     const next = (editFiche.activites || []).length;
     setEditFiche({
@@ -122,6 +148,7 @@ export default function Coordination() {
         <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Coordination · Fiches projet</h1>
         {isAdmin && (
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowCloneDialog(true)} data-testid="clone-promo-btn"><Copy size={14} className="mr-1" /> Cloner depuis annee precedente</Button>
             <Button variant="outline" size="sm" onClick={importUEs} data-testid="import-ues-btn"><Download size={14} className="mr-1" /> Importer toutes les UE</Button>
             <Button size="sm" onClick={startNew} data-testid="new-fiche-btn"><Plus size={14} className="mr-1" /> Nouvelle fiche</Button>
           </div>
@@ -297,6 +324,41 @@ export default function Coordination() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* Clone Dialog */}
+      <Dialog open={showCloneDialog} onOpenChange={setShowCloneDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Cloner les fiches projet</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-500">
+              Toutes les fiches projet de la promotion source seront recreees pour la promotion cible (activites incluses, sans liaison aux seances).
+              Les seances liees devront etre re-programmees dans le planning macro.
+            </p>
+            <div>
+              <Label className="text-xs">Promotion source (annee precedente)</Label>
+              <Select value={cloneForm.source_promotion_id} onValueChange={v => setCloneForm({ ...cloneForm, source_promotion_id: v })}>
+                <SelectTrigger className="h-9 text-sm" data-testid="clone-source"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}{p.annee_entree ? ` (${p.annee_entree}-${p.annee_sortie})` : ''}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Promotion cible (nouvelle annee)</Label>
+              <Select value={cloneForm.target_promotion_id} onValueChange={v => setCloneForm({ ...cloneForm, target_promotion_id: v })}>
+                <SelectTrigger className="h-9 text-sm" data-testid="clone-target"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}{p.annee_entree ? ` (${p.annee_entree}-${p.annee_sortie})` : ''}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4" checked={cloneForm.replace_existing}
+                onChange={e => setCloneForm({ ...cloneForm, replace_existing: e.target.checked })} data-testid="clone-replace" />
+              <span>Remplacer les fiches existantes de la promotion cible</span>
+            </label>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setShowCloneDialog(false)} disabled={cloneLoading}>Annuler</Button>
+              <Button size="sm" onClick={runClone} disabled={cloneLoading} data-testid="clone-confirm">{cloneLoading ? 'Clonage...' : 'Cloner'}</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

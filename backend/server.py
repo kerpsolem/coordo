@@ -893,6 +893,68 @@ async def fiches_a_programmer(request: Request, promotion_id: Optional[str] = No
     result.sort(key=lambda x: (x["ue_id"], x["ordre"]))
     return result
 
+@api_router.post("/fiches-projet/clone-promotion")
+async def clone_fiches_promotion(request: Request):
+    """
+    Clone toutes les fiches projet d'une promotion source vers une promotion cible.
+    Body: { source_promotion_id, target_promotion_id, replace_existing? (bool) }
+    Les activites sont copiees sans session_id (toutes a re-programmer).
+    """
+    await require_admin(request)
+    b = await request.json()
+    src = b.get("source_promotion_id")
+    tgt = b.get("target_promotion_id")
+    replace = bool(b.get("replace_existing", False))
+    if not src or not tgt:
+        raise HTTPException(400, "source_promotion_id et target_promotion_id requis")
+    if src == tgt:
+        raise HTTPException(400, "La promotion source et cible doivent etre differentes")
+
+    # Optionnel: supprimer les fiches existantes de la cible
+    if replace:
+        await db.fiches_projet.delete_many({"promotion_id": tgt})
+
+    # Recupere toutes les fiches dont la promotion source est utilisee
+    src_fiches = await db.fiches_projet.find(
+        {"$or": [{"promotion_id": src}, {"activites.promotion_id": src}]},
+        {"_id": 0}
+    ).to_list(2000)
+
+    # Pour eviter les doublons (meme ue_id + semestre + cible) si pas replace
+    existing = set()
+    if not replace:
+        cur = await db.fiches_projet.find({"promotion_id": tgt}, {"_id": 0, "ue_id": 1, "semestre": 1}).to_list(2000)
+        existing = {(f.get("ue_id"), f.get("semestre")) for f in cur}
+
+    cloned = 0
+    skipped = 0
+    for f in src_fiches:
+        key = (f.get("ue_id"), f.get("semestre"))
+        if not replace and key in existing:
+            skipped += 1
+            continue
+        new_acts = []
+        for act in f.get("activites", []):
+            new_act = {k: v for k, v in act.items() if k not in ["id", "session_id"]}
+            # Replace promotion_id at activity level if it pointed to source
+            if new_act.get("promotion_id") == src:
+                new_act["promotion_id"] = tgt
+            new_act["id"] = str(uuid.uuid4())
+            new_acts.append(new_act)
+        new_fiche = {
+            "id": str(uuid.uuid4()),
+            "ue_id": f.get("ue_id"),
+            "semestre": f.get("semestre"),
+            "promotion_id": tgt,
+            "activites": new_acts,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "cloned_from": f.get("id"),
+        }
+        await db.fiches_projet.insert_one(new_fiche)
+        cloned += 1
+
+    return {"cloned": cloned, "skipped": skipped, "source_total": len(src_fiches)}
+
 @api_router.post("/fiches-projet/import-ues")
 async def import_ues_to_fiches(request: Request):
     """Crée une fiche projet vide pour chaque UE qui n'en a pas encore."""
