@@ -24,8 +24,6 @@ const consultationLinks = [
 
 const coordinationLinks = [
   { to: '/coordination-planning', label: 'Coordination planning', icon: BookOpen },
-  { to: '/coordination', label: 'Coordination · Fiches projet', icon: FolderKanban },
-  { to: '/vacances', label: 'Vacances par promotion', icon: Plane },
   { to: '/alertes', label: 'Alertes', icon: AlertTriangle },
   { to: '/absences-formateurs', label: 'Absences formateurs', icon: UserX },
   { to: '/pense-betes', label: 'Pense-betes', icon: StickyNote },

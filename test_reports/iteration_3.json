@@ -1,0 +1,42 @@
+{
+  "summary": "Iter3 testing of Coordination refactor: 3-tab CoordinationPlanning (Séances/Fiches projets/Vacances), enriched fiches activites schema, À programmer click→pre-filled session modal, inline edit auto-save (600ms debounce), sidebar cleanup. Backend 6/6 new tests PASS. Frontend: all data-testids present, 3 tabs visible, plan-act click opens pre-filled dialog (Intitulé+Promo correctly set), inline edit autosave persists across reload, Vacances panel renders, sidebar shows only /coordination-planning (no /coordination, /vacances).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/sessions/{id}", "issue": "Returns 405 (Method Not Allowed) - no GET-by-id endpoint defined. Not blocking; list endpoint covers it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Nouvelle séance modal (opened via plan-act click)", "issues": ["Date field uses browser native date picker (mm/dd/yyyy) instead of shadcn Calendar component", "Heure début / Heure fin use browser native time picker (AM/PM) instead of consistent French 24h format"]},
+      {"screen": "Nouvelle séance modal", "issues": ["Pre-fill from fiche activité only sets Intitulé and Promotion; Type d'activité and Formateurs are NOT pre-filled even when type_activite_id/formateur_ids are present in the fiche activity (e.g. minimal activities show empty Type/Formateurs)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_refactor_iter3.py",
+    "/app/test_reports/pytest/pytest_iter3.xml"
+  ],
+  "action_items": [
+    "[Optional] Replace native HTML date/time inputs in CoordinationPlanning session modal with shadcn Calendar / proper time-select for visual consistency.",
+    "[Medium] When opening the create-session modal from a plan-act click, also pre-fill 'Type d'activité' (from activity.type_activite_id) and 'Formateurs' checkboxes (from activity.formateur_ids). Currently only Intitulé and Promo are pre-filled.",
+    "[Optional] Consider adding GET /api/sessions/{id} for parity with other resources (currently 405)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1949 lines - past the 700 LOC threshold; should be split into routers (auth, sessions, fiches_projet, vacances, dashboard) for maintainability.",
+    "link-session endpoint accepts any session_id without verifying it exists in sessions collection (could leave orphan references). Same comment carried from iter2.",
+    "fiches_a_programmer correctly returns all new fields (formateur_ids, semaine_souhaitee, methodologie, objectifs, remarques, obligatoire, taille_groupe, type_activite_id) - verified by tests.",
+    "Pre-existing test failures in backend_test.py (delete user 403 vs 401/400) and test_new_features.py (bulk session counts changed because journee_entiere now creates 2 sessions/day matin+aprem) are NOT regressions of this refactor - pre-existing tests need updating.",
+    "Native HTML date/time inputs in session modal break design system consistency."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_refactor_iter3.py (new - 6 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (6/6 new iter3 tests)", "frontend": "100% on tested flows"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Test fixtures create TEST_RefactorFiche fiche with 2 activites, cleaned up by autouse teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Coordination refactor verified end-to-end. Pre-existing failing tests in backend_test.py (TestUserDelete) and test_new_features.py (TestSessionsBulk stage_mode_35h_cap, journee_entiere_defaults) are unrelated to this iter3 refactor and need updating to match new behaviour (journee_entiere now creates 2 half-day sessions per day). Native date/time pickers in 'Nouvelle séance' modal are a known design inconsistency. The plan-act click pre-fills only Intitulé+Promotion - Type and Formateurs need to also be pre-filled to fully satisfy the spec."
+}

@@ -1,31 +1,35 @@
 import { useState, useEffect, useCallback } from 'react';
 import API from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, CardContent } from '../components/ui/card';
+import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, Edit2, Trash2, GripVertical, Layers, ArrowUp, ArrowDown, Download, Copy, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Download, Copy, RefreshCw, ChevronDown, ChevronRight, Check } from 'lucide-react';
 
-const TAILLES = [
-  { value: 'promo_entiere', label: 'Promotion entiere' },
-  { value: 'demi_promo', label: '1/2 promotion' },
-  { value: 'quart_promo', label: '1/4 promotion' },
-];
+const TYPE_BADGE = {
+  CM: { bg: 'bg-yellow-300', text: 'text-yellow-900' },
+  CMo: { bg: 'bg-blue-300', text: 'text-blue-900' },
+  TD: { bg: 'bg-green-300', text: 'text-green-900' },
+  TP: { bg: 'bg-orange-300', text: 'text-orange-900' },
+  TPG: { bg: 'bg-orange-400', text: 'text-orange-900' },
+  EVAL: { bg: 'bg-red-300', text: 'text-red-900' },
+};
 
-export default function Coordination() {
+const GROUPES_PRESETS = ['Promo entière', 'Groupe 1', 'Groupe 2', 'Groupe 3', 'Demi-promo', '1/4 promo'];
+
+export function FichesProjets() {
   const { isAdmin } = useAuth();
   const [fiches, setFiches] = useState([]);
   const [ues, setUes] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [actTypes, setActTypes] = useState([]);
-  const [filterSemestre, setFilterSemestre] = useState('all');
-  const [filterUe, setFilterUe] = useState('all');
+  const [formateurs, setFormateurs] = useState([]);
   const [filterPromo, setFilterPromo] = useState('all');
-  const [editFiche, setEditFiche] = useState(null);
-  const [showDialog, setShowDialog] = useState(false);
+  const [filterSemestre, setFilterSemestre] = useState('all');
+  const [collapsed, setCollapsed] = useState({});
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneForm, setCloneForm] = useState({ source_promotion_id: '', target_promotion_id: '', replace_existing: false });
   const [cloneLoading, setCloneLoading] = useState(false);
@@ -33,351 +37,323 @@ export default function Coordination() {
   const load = useCallback(async () => {
     try {
       const params = {};
-      if (filterSemestre !== 'all') params.semestre = filterSemestre;
-      if (filterUe !== 'all') params.ue_id = filterUe;
       if (filterPromo !== 'all') params.promotion_id = filterPromo;
-      const [fr, ur, pr, ar] = await Promise.all([
+      if (filterSemestre !== 'all') params.semestre = filterSemestre;
+      const [fr, ur, pr, ar, fmr] = await Promise.all([
         API.get('/fiches-projet', { params }),
-        API.get('/ues'), API.get('/promotions'), API.get('/activity-types')
+        API.get('/ues'), API.get('/promotions'),
+        API.get('/activity-types'), API.get('/formateurs')
       ]);
-      setFiches(fr.data); setUes(ur.data); setPromotions(pr.data); setActTypes(ar.data);
+      setFiches(fr.data); setUes(ur.data); setPromotions(pr.data); setActTypes(ar.data); setFormateurs(fmr.data);
     } catch (e) { console.error(e); }
-  }, [filterSemestre, filterUe, filterPromo]);
+  }, [filterPromo, filterSemestre]);
 
   useEffect(() => { load(); }, [load]);
 
   const ueMap = Object.fromEntries(ues.map(u => [u.id, u]));
-  const promoMap = Object.fromEntries(promotions.map(p => [p.id, p]));
+  const fmMap = Object.fromEntries(formateurs.map(f => [f.id, f]));
+  const atMap = Object.fromEntries(actTypes.map(a => [a.id, a]));
+  const atByName = Object.fromEntries(actTypes.map(a => [a.nom, a]));
 
-  const startNew = () => {
-    setEditFiche({
-      ue_id: '', semestre: '', promotion_id: '',
-      activites: []
-    });
-    setShowDialog(true);
-  };
-
-  const startEdit = (f) => {
-    setEditFiche(JSON.parse(JSON.stringify(f)));
-    setShowDialog(true);
-  };
-
-  const save = async () => {
+  // Auto-save with debounce per fiche
+  const saveFiche = async (fiche) => {
     try {
-      // Reorder activites by ordre
-      const acts = (editFiche.activites || []).map((a, i) => ({ ...a, ordre: a.ordre ?? i }));
-      const payload = { ...editFiche, activites: acts };
-      if (editFiche.id) await API.put(`/fiches-projet/${editFiche.id}`, payload);
-      else await API.post('/fiches-projet', payload);
-      setShowDialog(false); load();
-    } catch (e) { console.error(e); alert('Erreur lors de l\'enregistrement'); }
+      await API.put(`/fiches-projet/${fiche.id}`, fiche);
+    } catch (e) { console.error('Save failed:', e); }
   };
 
-  const del = async (id) => {
-    if (!window.confirm('Supprimer cette fiche projet ?')) return;
-    try {
-      await API.delete(`/fiches-projet/${id}`);
-      load();
-    } catch (e) {
-      console.error('Delete failed:', e);
-      const detail = e.response?.data?.detail || e.message || 'Erreur inconnue';
-      alert(`Suppression impossible : ${detail}`);
-    }
+  const updateActivite = (ficheId, idx, patch) => {
+    setFiches(prev => prev.map(f => {
+      if (f.id !== ficheId) return f;
+      const acts = [...(f.activites || [])];
+      acts[idx] = { ...acts[idx], ...patch };
+      const updated = { ...f, activites: acts };
+      // Debounced save
+      clearTimeout(window[`__save_${ficheId}`]);
+      window[`__save_${ficheId}`] = setTimeout(() => saveFiche(updated), 600);
+      return updated;
+    }));
+  };
+
+  const addActivite = (ficheId) => {
+    setFiches(prev => prev.map(f => {
+      if (f.id !== ficheId) return f;
+      const acts = f.activites || [];
+      const updated = {
+        ...f,
+        activites: [...acts, {
+          nom: '', heures: 2, type_activite_id: atByName.CM?.id || '',
+          taille_groupe: 'Promo entière', ordre: acts.length,
+          obligatoire: true, semaine_souhaitee: '',
+          formateur_ids: [], methodologie: '', objectifs: '', remarques: ''
+        }]
+      };
+      saveFiche(updated);
+      return updated;
+    }));
+  };
+
+  const removeActivite = (ficheId, idx) => {
+    setFiches(prev => prev.map(f => {
+      if (f.id !== ficheId) return f;
+      const acts = [...(f.activites || [])];
+      acts.splice(idx, 1);
+      const updated = { ...f, activites: acts };
+      saveFiche(updated);
+      return updated;
+    }));
   };
 
   const importUEs = async () => {
-    if (!window.confirm('Creer automatiquement une fiche projet vide pour chaque UE qui n\'en a pas encore ?')) return;
     try {
       const { data } = await API.post('/fiches-projet/import-ues');
-      alert(`Import termine : ${data.created} fiche(s) cree(s), ${data.skipped} deja existante(s).`);
+      alert(`Import: ${data.created} cree(s), ${data.skipped} deja existante(s).`);
       load();
-    } catch (e) { console.error(e); alert('Erreur lors de l\'import'); }
+    } catch (e) { console.error(e); alert('Erreur'); }
   };
 
   const importSessions = async () => {
-    if (!window.confirm('Recuperer toutes les seances deja programmees et les ajouter dans les fiches projet correspondantes ?')) return;
     try {
       const { data } = await API.post('/fiches-projet/import-sessions');
-      alert(`Import termine :\n- ${data.activites_added} activite(s) ajoutee(s)\n- ${data.fiches_created} fiche(s) cree(s)\n- ${data.skipped} deja presente(s)\nSur ${data.sessions_total} seance(s) au total.`);
+      alert(`Import: ${data.activites_added} activite(s), ${data.fiches_created} fiche(s) sur ${data.sessions_total} seance(s).`);
       load();
-    } catch (e) { console.error(e); alert('Erreur lors de l\'import des seances'); }
+    } catch (e) { console.error(e); alert('Erreur'); }
   };
 
   const runClone = async () => {
-    if (!cloneForm.source_promotion_id || !cloneForm.target_promotion_id) {
-      alert('Selectionnez la promotion source et cible.');
-      return;
-    }
-    if (cloneForm.source_promotion_id === cloneForm.target_promotion_id) {
-      alert('La promotion source et cible doivent etre differentes.');
-      return;
-    }
+    if (!cloneForm.source_promotion_id || !cloneForm.target_promotion_id) { alert('Selectionnez les promotions'); return; }
+    if (cloneForm.source_promotion_id === cloneForm.target_promotion_id) { alert('Source et cible identiques'); return; }
     setCloneLoading(true);
     try {
       const { data } = await API.post('/fiches-projet/clone-promotion', cloneForm);
-      alert(`Clonage termine : ${data.cloned} fiche(s) clonee(s), ${data.skipped} ignoree(s) (deja presente(s) sur la cible).`);
-      setShowCloneDialog(false);
-      setCloneForm({ source_promotion_id: '', target_promotion_id: '', replace_existing: false });
-      load();
-    } catch (e) {
-      console.error(e);
-      alert(e?.response?.data?.detail || 'Erreur lors du clonage');
-    }
+      alert(`Clone : ${data.cloned} fiche(s).`);
+      setShowCloneDialog(false); load();
+    } catch (e) { alert(e?.response?.data?.detail || 'Erreur'); }
     setCloneLoading(false);
   };
 
-  const addActivite = () => {
-    const next = (editFiche.activites || []).length;
-    setEditFiche({
-      ...editFiche,
-      activites: [...(editFiche.activites || []), { nom: '', heures: 2, promotion_id: editFiche.promotion_id || '', taille_groupe: 'promo_entiere', ordre: next, type_activite_id: '' }]
-    });
-  };
-
-  const updateActivite = (idx, patch) => {
-    const acts = [...(editFiche.activites || [])];
-    acts[idx] = { ...acts[idx], ...patch };
-    setEditFiche({ ...editFiche, activites: acts });
-  };
-
-  const removeActivite = (idx) => {
-    const acts = [...(editFiche.activites || [])];
-    acts.splice(idx, 1);
-    setEditFiche({ ...editFiche, activites: acts });
-  };
-
-  const moveActivite = (idx, dir) => {
-    const acts = [...(editFiche.activites || [])];
-    const target = idx + dir;
-    if (target < 0 || target >= acts.length) return;
-    [acts[idx], acts[target]] = [acts[target], acts[idx]];
-    acts.forEach((a, i) => { a.ordre = i; });
-    setEditFiche({ ...editFiche, activites: acts });
-  };
-
-  // Group fiches by UE
-  const fichesByUE = fiches.reduce((acc, f) => { (acc[f.ue_id] = acc[f.ue_id] || []).push(f); return acc; }, {});
+  // Sort fiches: by UE code then promo
+  const sortedFiches = [...fiches].sort((a, b) => {
+    const ua = ueMap[a.ue_id]?.code_ue || '';
+    const ub = ueMap[b.ue_id]?.code_ue || '';
+    return ua.localeCompare(ub);
+  });
 
   return (
-    <div className="space-y-4" data-testid="coordination-page">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Coordination · Fiches projet</h1>
+    <div className="space-y-3" data-testid="fiches-projets-tab">
+      {/* Filters and actions */}
+      <Card className="p-4 bg-blue-900 dark:bg-blue-950 text-white border-0">
+        <h2 className="text-center text-base font-bold tracking-wider uppercase">Déroulement des séquences de l'UE</h2>
+      </Card>
+      <div className="flex flex-wrap items-end justify-between gap-3 px-1">
+        <div className="flex items-end gap-2 flex-wrap">
+          <Select value={filterPromo} onValueChange={setFilterPromo}>
+            <SelectTrigger className="h-9 w-44 text-sm" data-testid="filter-promo"><SelectValue placeholder="Promotion" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes les promos</SelectItem>
+              {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterSemestre} onValueChange={setFilterSemestre}>
+            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue placeholder="Semestre" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous semestres</SelectItem>
+              {['S1','S2','S3','S4','S5','S6'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-slate-500 ml-2">{sortedFiches.length} UEs affichées</span>
+        </div>
         {isAdmin && (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={importSessions} data-testid="import-sessions-btn"><RefreshCw size={14} className="mr-1" /> Recuperer seances programmees</Button>
-            <Button variant="outline" size="sm" onClick={() => setShowCloneDialog(true)} data-testid="clone-promo-btn"><Copy size={14} className="mr-1" /> Cloner depuis annee precedente</Button>
-            <Button variant="outline" size="sm" onClick={importUEs} data-testid="import-ues-btn"><Download size={14} className="mr-1" /> Importer toutes les UE</Button>
-            <Button size="sm" onClick={startNew} data-testid="new-fiche-btn"><Plus size={14} className="mr-1" /> Nouvelle fiche</Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={importSessions}><RefreshCw size={14} className="mr-1" />Récup. séances</Button>
+            <Button variant="outline" size="sm" onClick={() => setShowCloneDialog(true)}><Copy size={14} className="mr-1" />Cloner</Button>
+            <Button variant="outline" size="sm" onClick={importUEs}><Download size={14} className="mr-1" />Importer UE</Button>
           </div>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2 items-end">
-        <div>
-          <Label className="text-xs">Semestre</Label>
-          <Select value={filterSemestre} onValueChange={setFilterSemestre}>
-            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous</SelectItem>
-              {['S1','S2','S3','S4','S5','S6'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">UE</Label>
-          <Select value={filterUe} onValueChange={setFilterUe}>
-            <SelectTrigger className="w-60 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes</SelectItem>
-              {ues.map(u => <SelectItem key={u.id} value={u.id}>{u.code_ue} - {u.intitule}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Promotion</Label>
-          <Select value={filterPromo} onValueChange={setFilterPromo}>
-            <SelectTrigger className="w-44 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes</SelectItem>
-              {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Liste groupée par UE */}
-      {Object.keys(fichesByUE).length === 0 ? (
-        <Card><CardContent className="py-10 text-center text-sm text-slate-500">Aucune fiche projet. Cliquez sur "Nouvelle fiche" pour commencer.</CardContent></Card>
-      ) : (
-        <div className="space-y-3">
-          {Object.entries(fichesByUE).map(([ueId, list]) => {
-            const ue = ueMap[ueId] || {};
-            return (
-              <div key={ueId}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Layers size={14} className="text-violet-600" />
-                  <h3 className="text-sm font-semibold">{ue.code_ue || 'UE inconnue'} · {ue.intitule || ''}</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {list.map(f => {
-                    const totalH = (f.activites || []).reduce((s, a) => s + (a.heures || 0), 0);
-                    const placed = (f.activites || []).filter(a => a.session_id).length;
-                    const total = (f.activites || []).length;
-                    const promo = promoMap[f.promotion_id];
-                    return (
-                      <Card key={f.id} className="hover:shadow-md transition-shadow" data-testid={`fiche-${f.id}`}>
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <div className="text-xs text-slate-500">{f.semestre} {promo ? `· ${promo.nom}` : ''}</div>
-                              <div className="text-sm font-semibold mt-0.5">{total} activite(s) · {totalH}h</div>
-                            </div>
-                            {isAdmin && (
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => startEdit(f)} title="Modifier"><Edit2 size={12} /></Button>
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => del(f.id)} title="Supprimer"><Trash2 size={12} /></Button>
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mb-2">Programme: <span className="font-bold text-violet-700">{placed}/{total}</span></div>
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {(f.activites || []).sort((a,b) => (a.ordre||0)-(b.ordre||0)).map((a, i) => (
-                              <div key={a.id || i} className={`text-[11px] px-2 py-1 rounded border ${a.session_id ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'}`}>
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium truncate">{a.ordre + 1}. {a.nom || '(sans nom)'}</span>
-                                  <span className="text-slate-500">{a.heures}h</span>
-                                </div>
-                                <div className="text-[10px] text-slate-500 mt-0.5">{(a.taille_groupe || 'promo_entiere').replace('_', ' ')} {a.session_id ? '· programme' : '· a programmer'}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editFiche?.id ? 'Modifier la fiche projet' : 'Nouvelle fiche projet'}</DialogTitle></DialogHeader>
-          {editFiche && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-xs">UE *</Label>
-                  <Select value={editFiche.ue_id || ''} onValueChange={v => setEditFiche({ ...editFiche, ue_id: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>
-                    <SelectContent>{ues.map(u => <SelectItem key={u.id} value={u.id}>{u.code_ue} - {u.intitule}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Semestre *</Label>
-                  <Select value={editFiche.semestre || ''} onValueChange={v => setEditFiche({ ...editFiche, semestre: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>
-                    <SelectContent>{['S1','S2','S3','S4','S5','S6'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Promotion (defaut)</Label>
-                  <Select value={editFiche.promotion_id || ''} onValueChange={v => setEditFiche({ ...editFiche, promotion_id: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Optionnel" /></SelectTrigger>
-                    <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="border-t pt-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold">Activites / Cours ({(editFiche.activites || []).length})</h4>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addActivite} data-testid="add-activite"><Plus size={12} className="mr-1" /> Ajouter</Button>
-                </div>
-                <div className="space-y-2">
-                  {(editFiche.activites || []).map((a, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center p-2 rounded border border-slate-200 dark:border-slate-700">
-                      <div className="col-span-1 flex flex-col items-center text-slate-400">
-                        <button type="button" onClick={() => moveActivite(idx, -1)} disabled={idx === 0} className="disabled:opacity-30"><ArrowUp size={12} /></button>
-                        <span className="text-[10px] font-bold">{idx + 1}</span>
-                        <button type="button" onClick={() => moveActivite(idx, 1)} disabled={idx === (editFiche.activites.length - 1)} className="disabled:opacity-30"><ArrowDown size={12} /></button>
-                      </div>
-                      <div className="col-span-4">
-                        <Input className="h-8 text-sm" placeholder="Nom de la seance" value={a.nom || ''} onChange={e => updateActivite(idx, { nom: e.target.value })} />
-                      </div>
-                      <div className="col-span-1">
-                        <Input className="h-8 text-sm" type="number" min="0" step="0.5" placeholder="h" value={a.heures || ''} onChange={e => updateActivite(idx, { heures: parseFloat(e.target.value) || 0 })} />
-                      </div>
-                      <div className="col-span-3">
-                        <Select value={a.promotion_id || ''} onValueChange={v => updateActivite(idx, { promotion_id: v })}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Promo" /></SelectTrigger>
-                          <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-2">
-                        <Select value={a.taille_groupe || 'promo_entiere'} onValueChange={v => updateActivite(idx, { taille_groupe: v })}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>{TAILLES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => removeActivite(idx)}><Trash2 size={12} /></Button>
-                      </div>
-                    </div>
-                  ))}
-                  {(editFiche.activites || []).length === 0 && (
-                    <p className="text-center text-xs text-slate-500 py-3">Aucune activite. Cliquez sur "Ajouter" pour en creer une.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>Annuler</Button>
-                <Button size="sm" onClick={save} data-testid="save-fiche">Enregistrer</Button>
+      {/* Liste des fiches par UE */}
+      {sortedFiches.length === 0 ? (
+        <Card className="py-10 text-center text-sm text-slate-500">Aucune fiche projet. Cliquez sur "Importer UE" pour démarrer.</Card>
+      ) : sortedFiches.map(fiche => {
+        const ue = ueMap[fiche.ue_id];
+        const acts = fiche.activites || [];
+        const totalH = acts.reduce((s, a) => s + (parseFloat(a.heures) || 0), 0);
+        const planned = acts.filter(a => a.session_id).length;
+        const isCollapsed = collapsed[fiche.id];
+        return (
+          <Card key={fiche.id} className="overflow-hidden" data-testid={`fiche-${fiche.id}`}>
+            {/* Header bleu nuit */}
+            <div className="bg-blue-900 dark:bg-blue-950 text-white px-4 py-2.5 flex items-center justify-between">
+              <button onClick={() => setCollapsed(c => ({ ...c, [fiche.id]: !c[fiche.id] }))} className="flex items-center gap-2 hover:opacity-80">
+                {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                <span className="font-bold text-sm">{ue?.code_ue || 'UE ?'} — {ue?.intitule || ''}</span>
+                {fiche.semestre && <span className="text-[10px] px-1.5 py-0.5 bg-blue-700 rounded">{fiche.semestre}</span>}
+              </button>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-blue-200">{acts.length} séquence{acts.length !== 1 ? 's' : ''} · {totalH.toFixed(1)}h{planned > 0 && ` · ${planned}/${acts.length} planifiées`}</span>
+                {isAdmin && <Button size="sm" variant="ghost" className="h-7 text-xs text-white hover:bg-blue-800" onClick={() => addActivite(fiche.id)} data-testid={`add-line-${fiche.id}`}><Plus size={12} className="mr-1" />Ligne</Button>}
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+            {/* Tableau */}
+            {!isCollapsed && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left w-10">N°</th>
+                      <th className="px-2 py-1.5 text-left">Intitulé de la séquence</th>
+                      <th className="px-2 py-1.5 text-left w-20">Type</th>
+                      <th className="px-2 py-1.5 text-left">Méthodologie</th>
+                      <th className="px-2 py-1.5 text-left">Objectifs</th>
+                      <th className="px-2 py-1.5 text-center w-16">Temps (h)</th>
+                      <th className="px-2 py-1.5 text-center w-16">Oblig.</th>
+                      <th className="px-2 py-1.5 text-center w-20">N° Sem.</th>
+                      <th className="px-2 py-1.5 text-left w-32">Taille groupe</th>
+                      <th className="px-2 py-1.5 text-left w-32">Intervenants</th>
+                      <th className="px-2 py-1.5 text-left">Remarques</th>
+                      <th className="px-2 py-1.5 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acts.length === 0 && (
+                      <tr><td colSpan={12} className="text-center py-4 text-slate-400">Aucune séquence. Cliquez "Ligne" pour ajouter.</td></tr>
+                    )}
+                    {acts.map((act, idx) => {
+                      const at = atMap[act.type_activite_id];
+                      const badge = at ? TYPE_BADGE[at.nom] : null;
+                      return (
+                        <tr key={idx} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                          <td className="px-2 py-1.5 text-slate-400 text-center">{idx + 1}</td>
+                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Intitulé..." value={act.nom || ''} onChange={e => updateActivite(fiche.id, idx, { nom: e.target.value })} disabled={!isAdmin} /></td>
+                          <td className="px-1 py-1">
+                            {isAdmin ? (
+                              <Select value={act.type_activite_id || ''} onValueChange={v => updateActivite(fiche.id, idx, { type_activite_id: v })}>
+                                <SelectTrigger className={`h-7 px-1.5 text-[11px] font-bold border-0 shadow-none ${badge ? `${badge.bg} ${badge.text}` : ''}`}>
+                                  <SelectValue placeholder="—" />
+                                </SelectTrigger>
+                                <SelectContent>{actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}</SelectContent>
+                              </Select>
+                            ) : (
+                              at && <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${badge?.bg || 'bg-slate-200'} ${badge?.text || ''}`}>{at.nom}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Méthode..." value={act.methodologie || ''} onChange={e => updateActivite(fiche.id, idx, { methodologie: e.target.value })} disabled={!isAdmin} /></td>
+                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Objectifs..." value={act.objectifs || ''} onChange={e => updateActivite(fiche.id, idx, { objectifs: e.target.value })} disabled={!isAdmin} /></td>
+                          <td className="px-1 py-1"><Input type="number" step="0.1" min="0" className="h-7 text-xs text-center border-0 shadow-none focus-visible:ring-1" value={act.heures ?? ''} onChange={e => updateActivite(fiche.id, idx, { heures: parseFloat(e.target.value) || 0 })} disabled={!isAdmin} /></td>
+                          <td className="px-1 py-1 text-center">
+                            <button type="button" onClick={() => isAdmin && updateActivite(fiche.id, idx, { obligatoire: !act.obligatoire })} disabled={!isAdmin}
+                              className={`w-5 h-5 rounded inline-flex items-center justify-center ${act.obligatoire ? 'bg-blue-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                              {act.obligatoire && <Check size={12} className="text-white" />}
+                            </button>
+                          </td>
+                          <td className="px-1 py-1"><Input className="h-7 text-xs text-center border-0 shadow-none focus-visible:ring-1" placeholder="S15" value={act.semaine_souhaitee || ''} onChange={e => updateActivite(fiche.id, idx, { semaine_souhaitee: e.target.value })} disabled={!isAdmin} /></td>
+                          <td className="px-1 py-1">
+                            {isAdmin ? (
+                              <Select value={act.taille_groupe || 'Promo entière'} onValueChange={v => updateActivite(fiche.id, idx, { taille_groupe: v })}>
+                                <SelectTrigger className="h-7 text-[11px] border-0 shadow-none"><SelectValue /></SelectTrigger>
+                                <SelectContent>{GROUPES_PRESETS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                              </Select>
+                            ) : <span className="text-[11px]">{act.taille_groupe}</span>}
+                          </td>
+                          <td className="px-1 py-1">
+                            {isAdmin ? (
+                              <FormateurMultiSelect formateurs={formateurs} selected={act.formateur_ids || []} onChange={ids => updateActivite(fiche.id, idx, { formateur_ids: ids })} />
+                            ) : (
+                              <span className="text-[11px]" title={(act.formateur_ids || []).map(id => fmMap[id] && `${fmMap[id].prenom} ${fmMap[id].nom}`).filter(Boolean).join(', ')}>
+                                {(act.formateur_ids || []).map(id => fmMap[id]?.initiales).filter(Boolean).join(', ')}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Remarques..." value={act.remarques || ''} onChange={e => updateActivite(fiche.id, idx, { remarques: e.target.value })} disabled={!isAdmin} /></td>
+                          <td className="px-1 py-1 text-right">
+                            {isAdmin && (
+                              <button onClick={() => removeActivite(fiche.id, idx)} className="text-red-400 hover:text-red-600 p-1" data-testid={`remove-act-${fiche.id}-${idx}`}>
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+
       {/* Clone Dialog */}
       <Dialog open={showCloneDialog} onOpenChange={setShowCloneDialog}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Cloner les fiches projet</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p className="text-xs text-slate-500">
-              Toutes les fiches projet de la promotion source seront recreees pour la promotion cible (activites incluses, sans liaison aux seances).
-              Les seances liees devront etre re-programmees dans le planning macro.
-            </p>
+          <DialogHeader><DialogTitle>Cloner depuis une promotion</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">Toutes les fiches de la promotion source seront recréées pour la promotion cible.</p>
             <div>
-              <Label className="text-xs">Promotion source (annee precedente)</Label>
+              <Label className="text-xs">Source</Label>
               <Select value={cloneForm.source_promotion_id} onValueChange={v => setCloneForm({ ...cloneForm, source_promotion_id: v })}>
-                <SelectTrigger className="h-9 text-sm" data-testid="clone-source"><SelectValue placeholder="Choisir" /></SelectTrigger>
-                <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}{p.annee_entree ? ` (${p.annee_entree}-${p.annee_sortie})` : ''}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Promotion cible (nouvelle annee)</Label>
+              <Label className="text-xs">Cible</Label>
               <Select value={cloneForm.target_promotion_id} onValueChange={v => setCloneForm({ ...cloneForm, target_promotion_id: v })}>
-                <SelectTrigger className="h-9 text-sm" data-testid="clone-target"><SelectValue placeholder="Choisir" /></SelectTrigger>
-                <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}{p.annee_entree ? ` (${p.annee_entree}-${p.annee_sortie})` : ''}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                <SelectContent>{promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="h-4 w-4" checked={cloneForm.replace_existing}
-                onChange={e => setCloneForm({ ...cloneForm, replace_existing: e.target.checked })} data-testid="clone-replace" />
-              <span>Remplacer les fiches existantes de la promotion cible</span>
+              <input type="checkbox" checked={cloneForm.replace_existing} onChange={e => setCloneForm({ ...cloneForm, replace_existing: e.target.checked })} />
+              Remplacer les fiches existantes
             </label>
             <div className="flex justify-end gap-2 pt-2 border-t">
               <Button variant="outline" size="sm" onClick={() => setShowCloneDialog(false)} disabled={cloneLoading}>Annuler</Button>
-              <Button size="sm" onClick={runClone} disabled={cloneLoading} data-testid="clone-confirm">{cloneLoading ? 'Clonage...' : 'Cloner'}</Button>
+              <Button size="sm" onClick={runClone} disabled={cloneLoading}>{cloneLoading ? 'Clonage...' : 'Cloner'}</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   );
+}
+
+// Multi-select formateur (popover-like checkbox list)
+function FormateurMultiSelect({ formateurs, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const sel = selected || [];
+  const display = sel.map(id => formateurs.find(f => f.id === id)?.initiales).filter(Boolean).join(', ');
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full h-7 px-2 text-[11px] text-left rounded hover:bg-slate-100 dark:hover:bg-slate-800 truncate" title={display}>
+        {display || <span className="text-slate-400">Choisir...</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute z-40 top-full left-0 mt-1 w-56 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 rounded-md shadow-lg border border-slate-200 dark:border-slate-700 p-1">
+            {formateurs.map(f => {
+              const checked = sel.includes(f.id);
+              return (
+                <label key={f.id} className="flex items-center gap-2 px-2 py-1 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-700 rounded cursor-pointer">
+                  <input type="checkbox" checked={checked} onChange={e => {
+                    onChange(e.target.checked ? [...sel, f.id] : sel.filter(i => i !== f.id));
+                  }} />
+                  <span className="font-mono font-bold">{f.initiales}</span>
+                  <span className="text-slate-500 truncate">{f.prenom} {f.nom}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Default export = standalone page (kept for backwards compatibility)
+export default function Coordination() {
+  return <div className="space-y-4" data-testid="coordination-page"><FichesProjets /></div>;
 }

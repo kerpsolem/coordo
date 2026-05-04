@@ -923,9 +923,15 @@ async def fiches_a_programmer(request: Request, promotion_id: Optional[str] = No
                     "activite_id": act.get("id"),
                     "nom": act.get("nom", ""),
                     "heures": act.get("heures", 0),
-                    "taille_groupe": act.get("taille_groupe", "promo_entiere"),
+                    "taille_groupe": act.get("taille_groupe", "Promo entière"),
                     "ordre": act.get("ordre", 99),
                     "type_activite_id": act.get("type_activite_id"),
+                    "obligatoire": act.get("obligatoire", True),
+                    "semaine_souhaitee": act.get("semaine_souhaitee", ""),
+                    "formateur_ids": act.get("formateur_ids", []),
+                    "methodologie": act.get("methodologie", ""),
+                    "objectifs": act.get("objectifs", ""),
+                    "remarques": act.get("remarques", ""),
                 })
     result.sort(key=lambda x: (x["ue_id"], x["ordre"]))
     return result

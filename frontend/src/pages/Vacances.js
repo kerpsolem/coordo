@@ -21,7 +21,7 @@ const PRESETS = [
   'Autre',
 ];
 
-export default function Vacances() {
+export function VacancesPanel() {
   const { isAdmin } = useAuth();
   const [vacances, setVacances] = useState([]);
   const [promotions, setPromotions] = useState([]);
@@ -234,4 +234,8 @@ export default function Vacances() {
       </Dialog>
     </div>
   );
+}
+
+export default function Vacances() {
+  return <VacancesPanel />;
 }
