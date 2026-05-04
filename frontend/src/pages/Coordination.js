@@ -20,6 +20,35 @@ const TYPE_BADGE = {
 
 const GROUPES_PRESETS = ['Promo entière', 'Groupe 1', 'Groupe 2', 'Groupe 3', 'Demi-promo', '1/4 promo'];
 
+// Build list of ISO weeks from a Date by going N weeks forward and back
+function buildWeekOptions(refDate = new Date(), backWeeks = 8, fwdWeeks = 60) {
+  const opts = [];
+  // Get Monday of refDate week
+  const d = new Date(refDate);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  const refMon = new Date(d.setDate(diff));
+  for (let i = -backWeeks; i <= fwdWeeks; i++) {
+    const mon = new Date(refMon);
+    mon.setDate(refMon.getDate() + i * 7);
+    const fri = new Date(mon);
+    fri.setDate(mon.getDate() + 4);
+    // ISO week
+    const tmp = new Date(Date.UTC(mon.getFullYear(), mon.getMonth(), mon.getDate()));
+    tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+    const fmtFr = (date) => date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+    opts.push({
+      value: `S${weekNo}`,
+      label: `S${weekNo} · ${fmtFr(mon)} → ${fmtFr(fri)} ${tmp.getUTCFullYear()}`,
+      year: tmp.getUTCFullYear(),
+      week: weekNo,
+    });
+  }
+  return opts;
+}
+
 export function FichesProjets() {
   const { isAdmin } = useAuth();
   const [fiches, setFiches] = useState([]);
@@ -54,6 +83,7 @@ export function FichesProjets() {
   const fmMap = Object.fromEntries(formateurs.map(f => [f.id, f]));
   const atMap = Object.fromEntries(actTypes.map(a => [a.id, a]));
   const atByName = Object.fromEntries(actTypes.map(a => [a.nom, a]));
+  const weekOptions = buildWeekOptions();
 
   // Auto-save with debounce per fiche
   const saveFiche = async (fiche) => {
@@ -205,11 +235,9 @@ export function FichesProjets() {
                       <th className="px-2 py-1.5 text-left w-10">N°</th>
                       <th className="px-2 py-1.5 text-left">Intitulé de la séquence</th>
                       <th className="px-2 py-1.5 text-left w-20">Type</th>
-                      <th className="px-2 py-1.5 text-left">Méthodologie</th>
-                      <th className="px-2 py-1.5 text-left">Objectifs</th>
                       <th className="px-2 py-1.5 text-center w-16">Temps (h)</th>
                       <th className="px-2 py-1.5 text-center w-16">Oblig.</th>
-                      <th className="px-2 py-1.5 text-center w-20">N° Sem.</th>
+                      <th className="px-2 py-1.5 text-left w-44">N° Sem. souhaitée</th>
                       <th className="px-2 py-1.5 text-left w-32">Taille groupe</th>
                       <th className="px-2 py-1.5 text-left w-32">Intervenants</th>
                       <th className="px-2 py-1.5 text-left">Remarques</th>
@@ -218,7 +246,7 @@ export function FichesProjets() {
                   </thead>
                   <tbody>
                     {acts.length === 0 && (
-                      <tr><td colSpan={12} className="text-center py-4 text-slate-400">Aucune séquence. Cliquez "Ligne" pour ajouter.</td></tr>
+                      <tr><td colSpan={10} className="text-center py-4 text-slate-400">Aucune séquence. Cliquez "Ligne" pour ajouter.</td></tr>
                     )}
                     {acts.map((act, idx) => {
                       const at = atMap[act.type_activite_id];
@@ -239,8 +267,6 @@ export function FichesProjets() {
                               at && <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${badge?.bg || 'bg-slate-200'} ${badge?.text || ''}`}>{at.nom}</span>
                             )}
                           </td>
-                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Méthode..." value={act.methodologie || ''} onChange={e => updateActivite(fiche.id, idx, { methodologie: e.target.value })} disabled={!isAdmin} /></td>
-                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Objectifs..." value={act.objectifs || ''} onChange={e => updateActivite(fiche.id, idx, { objectifs: e.target.value })} disabled={!isAdmin} /></td>
                           <td className="px-1 py-1"><Input type="number" step="0.1" min="0" className="h-7 text-xs text-center border-0 shadow-none focus-visible:ring-1" value={act.heures ?? ''} onChange={e => updateActivite(fiche.id, idx, { heures: parseFloat(e.target.value) || 0 })} disabled={!isAdmin} /></td>
                           <td className="px-1 py-1 text-center">
                             <button type="button" onClick={() => isAdmin && updateActivite(fiche.id, idx, { obligatoire: !act.obligatoire })} disabled={!isAdmin}
@@ -248,7 +274,17 @@ export function FichesProjets() {
                               {act.obligatoire && <Check size={12} className="text-white" />}
                             </button>
                           </td>
-                          <td className="px-1 py-1"><Input className="h-7 text-xs text-center border-0 shadow-none focus-visible:ring-1" placeholder="S15" value={act.semaine_souhaitee || ''} onChange={e => updateActivite(fiche.id, idx, { semaine_souhaitee: e.target.value })} disabled={!isAdmin} /></td>
+                          <td className="px-1 py-1">
+                            {isAdmin ? (
+                              <Select value={act.semaine_souhaitee || ''} onValueChange={v => updateActivite(fiche.id, idx, { semaine_souhaitee: v === '__none__' ? '' : v })}>
+                                <SelectTrigger className="h-7 text-[11px] border-0 shadow-none"><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                  <SelectItem value="__none__">— (aucune)</SelectItem>
+                                  {weekOptions.map(w => <SelectItem key={`${w.year}-${w.week}`} value={w.value}>{w.label}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            ) : <span className="text-[11px]">{act.semaine_souhaitee || '—'}</span>}
+                          </td>
                           <td className="px-1 py-1">
                             {isAdmin ? (
                               <Select value={act.taille_groupe || 'Promo entière'} onValueChange={v => updateActivite(fiche.id, idx, { taille_groupe: v })}>
