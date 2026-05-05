@@ -673,12 +673,12 @@ export default function PlanningGlobal() {
                 return acc;
               }, {})).map(([pid, items]) => {
                 const promo = promoMap[pid] || {};
-                const promoLabel = promo.nom ? promo.nom.replace('Promotion ', '') : 'Sans promo';
-                const yearLabel = promo.annee_debut && promo.annee_fin ? `${promo.annee_debut}-${promo.annee_fin}` : '';
+                const shortLabel = promo.code || (promo.nom || '').match(/P\d+/)?.[0] || (promo.nom || '?').replace('Promotion ', '').slice(0, 4);
+                const yearLabel = promo.annee_debut && promo.annee_fin ? `${promo.annee_debut}-${promo.annee_fin}` : ((promo.nom || '').match(/\d{4}-\d{4}/)?.[0] || '');
                 return (
                   <div key={pid} className="border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50/50 dark:bg-slate-800/30">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-[10px] font-bold">{promoLabel}</span>
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-blue-500 text-white text-[10px] font-bold whitespace-nowrap">{shortLabel}</span>
                       {yearLabel && <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">{yearLabel}</span>}
                       <span className="text-[10px] text-slate-500 ml-auto">— {items.length} séance{items.length > 1 ? 's' : ''}</span>
                     </div>
@@ -692,8 +692,10 @@ export default function PlanningGlobal() {
                             draggable={isAdmin}
                             onDragStart={(e) => {
                               setDragActivite(a);
-                              e.dataTransfer.effectAllowed = 'copy';
-                              e.dataTransfer.setData('text/plain', a.activite_id);
+                              if (e.dataTransfer) {
+                                e.dataTransfer.effectAllowed = 'copy';
+                                e.dataTransfer.setData('text/plain', a.activite_id);
+                              }
                             }}
                             onDragEnd={() => { setDragActivite(null); setDragOverDay(null); }}
                             title={`${at.nom || ''} ${ue.code_ue || ''} — ${a.nom || ''} (${a.heures}h)${a.semaine_souhaitee ? ' · ' + a.semaine_souhaitee : ' · sans semaine'}`}
