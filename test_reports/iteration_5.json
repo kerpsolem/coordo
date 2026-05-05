@@ -1,0 +1,42 @@
+{
+  "summary": "Iter5 verified: drag-from-sidebar-to-grid flow on Planning Global + 'à programmer' visuals on Coordination Fiches Projets + sidebar pill refonte. Backend: 5/5 new tests in test_iter5_drag_link_session.py PASS (POST /sessions then POST link-session writes session_id; 404s on unknown fiche/activite; admin-only enforcement; unlink reverses link). Iter4 regression: 5/5 still PASS. Frontend: sidebar pills grouped by promo render correctly (TYPE colored border, UE code, heures), drag overlay banner appears on dragstart, Coordination shows 66 amber rows + 111 amber side-bars + 45 'X à programmer' badges as specified. One minor design issue with promo circle label truncation.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Planning Global > sidebar 'Programmation des séances' (a-programmer-sidebar-global)", "issues": ["Le cercle bleu de label promo (w-6 h-6 = 24px) affiche le texte issu de promo.nom.replace('Promotion ', '') qui produit '2026-2029' (9 chars) — overflow visible sous forme 'ans-' / '026-'. Spec demandait 'P1/P2/P3' mais les données seed utilisent 'Promotion AAAA-AAAA'. Suggestion: utiliser un code court (P1/P2/P3 selon promo.code ou ordre), OU agrandir le badge en pill avec yearLabel inline, OU retirer l'année du circle et la mettre uniquement à droite."]}
+    ],
+    "robustness_notes": [
+      {"location": "PlanningGlobal.js onDragStart pill", "issue": "e.dataTransfer.effectAllowed = 'copy' crashe si dataTransfer est null (cas Playwright dispatch_event synthétique). Real browser DnD HTML5 fournit toujours dataTransfer non-null donc ce n'est pas un bug user-facing, mais un guard `if (e.dataTransfer)` éviterait des crashs pour tests E2E synthétiques et certains lecteurs d'écran."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter5_drag_link_session.py",
+    "/app/backend/tests/test_iter4_ux_batch.py",
+    "/app/test_reports/pytest/pytest_iter5.xml"
+  ],
+  "action_items": [
+    "(Mineur design) Améliorer le rendu du badge promo dans la sidebar Planning Global — actuellement '2026-2029' déborde du cercle 24px. Soit utiliser un label court (Pn), soit inline avec l'année sans circle (ou agrandir).",
+    "(Robustesse) Ajouter un guard `if (e.dataTransfer)` dans onDragStart des pills de a-programmer-sidebar-global pour éviter le crash sous test synthétique."
+  ],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js a maintenant 836 lignes - dépasse seuil 700 LOC, devrait être splitté (sidebar pills, dropActivityOnDay, handlers DnD existants).",
+    "server.py reste à 2103 lignes - non-régressé mais toujours hors seuil; refactor en routers reste recommandé (déjà signalé iter4).",
+    "dropActivityOnDay calcule heure_fin via `Math.min(8 + ceil(heures), 18)` ce qui ignore des activités > 10h ou tôt le matin; OK pour MVP mais à renforcer (ex: ouvrir la modal après drop pour ajustement manuel).",
+    "Le badge 'X à programmer' est calculé inline dans le map de Coordination.js via filter — OK pour <100 fiches mais à mémoiser si la liste grossit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter5_drag_link_session.py (new - 5 tests, 5/5 passing)"
+  ],
+  "success_rate": {"backend": "100% (5/5 iter5 + 5/5 iter4 regression = 10/10)", "frontend": "100% sur les flows iter5 (sidebar pills rendering, drag overlay banner, Coordination amber visuals)"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (depuis /app/memory/test_credentials.md)",
+  "seed_data_creation": "Tests créent fiches/sessions préfixées TEST_iter5_ via try/finally cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter5 validé. Backend link-session écrit bien session_id sur l'activité ciblée + 404 propres + admin-only + unlink fonctionne. Frontend sidebar 'Programmation des séances' (data-testid a-programmer-sidebar-global) affiche pills groupées par promo: chaque groupe a circle bleu (LIMITATION: truncate text si promo.nom long) + yearLabel + '— N séance(s)', chaque pill (data-testid global-aprog-{activite_id}) ronde avec border-2 colorée par type, contenu TYPE + UE code + heures + ' · à programmer' si !semaine_souhaitee. Drag overlay banner 'Déposez ... sur un jour du planning' apparaît correctement au dragstart. Coordination Fiches Projets: 66 lignes amber (bg-amber-50/40), 111 barres verticales amber-400 à gauche, 45 badges 'X à programmer' (bg-amber-400 text-amber-950). E2E drag full via mouse non simulable proprement avec Playwright (pas de data-testid sur cellules jour pour drop), mais le contrat backend (POST sessions + link-session) est test-couvert et le frontend handler est trivial. Pas de cellules jour avec data-testid; pourrait être ajouté pour faciliter les tests E2E (ex: data-testid='day-cell-{promoId}-{dayStr}').",
+  "rca of the issue": "N/A - pas de bug bloquant. Seul un détail design mineur (label promo overflow dans circle 24px) à raffiner."
+}

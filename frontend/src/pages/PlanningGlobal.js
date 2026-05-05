@@ -45,7 +45,9 @@ export default function PlanningGlobal() {
   const [filterType, setFilterType] = useState('all');
   const [aProgrammer, setAProgrammer] = useState([]);
   const [dragOverSidebar, setDragOverSidebar] = useState(false);
-  const [dragingSession, setDraggingSession] = useState(null); // for "deprogrammer" drag
+  const [dragingSession, setDraggingSession] = useState(null);
+  const [dragActivite, setDragActivite] = useState(null); // activity from sidebar -> drop on grid
+  const [dragOverDay, setDragOverDay] = useState(null); // promoId|dayStr while dragging activity
 
   const [dragInfo, setDragInfo] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
@@ -186,6 +188,34 @@ export default function PlanningGlobal() {
     }
   };
   const toggleField = async (id, field, value) => { try { await API.patch(`/sessions/${id}/toggle`, { field, value }); loadData(); } catch (e) { console.error(e); } };
+
+  // ---- Drop an activity from "À programmer" sidebar onto a day column ----
+  const dropActivityOnDay = async (act, promoId, dayStr) => {
+    if (!isAdmin || !act) return;
+    try {
+      const heures = parseFloat(act.heures) || 2;
+      const heDeb = '08:00';
+      const endHour = Math.min(8 + Math.max(1, Math.ceil(heures)), 18);
+      const payload = {
+        date: dayStr,
+        heure_debut: heDeb,
+        heure_fin: `${String(endHour).padStart(2, '0')}:00`,
+        type_activite_id: act.type_activite_id || '',
+        intitule: act.nom || '',
+        promotion_id: promoId !== 'all' ? promoId : (act.promotion_id || ''),
+        ue_id: act.ue_id || '',
+        semestre: act.semestre || '',
+        formateur_ids: act.formateur_ids || [],
+        group_id: '', site_id: '', statut: 'Prevu', saisi: false, commentaire: '',
+      };
+      const { data: sess } = await API.post('/sessions', payload);
+      if (act.fiche_id && act.activite_id) {
+        try { await API.post(`/fiches-projet/${act.fiche_id}/activites/${act.activite_id}/link-session`, { session_id: sess.id }); } catch (e) { console.error(e); }
+      }
+      setDragActivite(null); setDragOverDay(null);
+      loadData();
+    } catch (e) { console.error(e); setDragActivite(null); setDragOverDay(null); }
+  };
 
   // ---- MOVE/RESIZE existing sessions ----
   const handleDragStart = (e, session, mode) => {
@@ -491,9 +521,12 @@ export default function PlanningGlobal() {
               const vacanceNom = vacancesByPromo[promoId]?.[dayStr];
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
               return (
-                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''}`} style={{ height: GRID_H }}
+                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''} ${dragOverDay === `${promoId}|${dayStr}` ? 'ring-2 ring-violet-400 ring-inset bg-violet-50/40' : ''}`} style={{ height: GRID_H }}
                   data-day={dayStr}
-                  onMouseDown={(e) => handleGridMouseDown(e, dayStr)}>
+                  onMouseDown={(e) => handleGridMouseDown(e, dayStr)}
+                  onDragOver={(e) => { if (dragActivite) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverDay(`${promoId}|${dayStr}`); } }}
+                  onDragLeave={() => { if (dragActivite && dragOverDay === `${promoId}|${dayStr}`) setDragOverDay(null); }}
+                  onDrop={(e) => { if (dragActivite) { e.preventDefault(); dropActivityOnDay(dragActivite, promoId, dayStr); } }}>
                   {vacanceNom && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                       <span className="text-orange-600 font-bold text-xs uppercase tracking-wide bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded shadow-sm">
@@ -608,8 +641,8 @@ export default function PlanningGlobal() {
 
       {/* Layout: sidebar À programmer + planning grids */}
       <div className="flex gap-3 items-start">
-        {/* Sidebar with drop-to-deprogram */}
-        <Card className="w-64 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar-global"
+        {/* Sidebar with drop-to-deprogram + draggable pills grouped by promo */}
+        <Card className="w-80 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar-global"
           onDragOver={(e) => { if (dragingSession) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverSidebar(true); } }}
           onDragLeave={() => setDragOverSidebar(false)}
           onDrop={async (e) => {
@@ -624,27 +657,56 @@ export default function PlanningGlobal() {
           <div className={`px-3 py-2 border-b bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between ${dragOverSidebar ? 'bg-rose-100 dark:bg-rose-950/30' : ''}`}>
             <div className="flex items-center gap-2">
               <ListTodo size={14} className="text-violet-600" />
-              <span className="text-sm font-semibold">{dragOverSidebar ? 'Déposer pour déprogrammer' : 'À programmer'}</span>
+              <span className="text-sm font-semibold">{dragOverSidebar ? 'Déposer pour déprogrammer' : 'Programmation des séances'}</span>
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 font-bold">{aProgrammer.length}</span>
           </div>
+          <p className="px-3 py-1.5 text-[10px] text-slate-500 border-b">Glissez une pastille sur le planning pour planifier la séance.</p>
           {aProgrammer.length === 0 ? (
-            <p className="p-3 text-xs text-slate-500">Aucune séquence non programmée. Glissez une séance ici pour la déprogrammer.</p>
+            <p className="p-3 text-xs text-slate-500">Aucune séquence non programmée.</p>
           ) : (
-            <div className="p-2 space-y-2">
-              {aProgrammer.slice(0, 60).map(a => {
-                const at = atMap[a.type_activite_id];
-                const promo = promoMap[a.promotion_id] || {};
-                const ue = ueMap[a.ue_id] || {};
+            <div className="p-2 space-y-3">
+              {/* Group by promotion */}
+              {Object.entries(aProgrammer.reduce((acc, a) => {
+                const pid = a.promotion_id || '_';
+                (acc[pid] = acc[pid] || []).push(a);
+                return acc;
+              }, {})).map(([pid, items]) => {
+                const promo = promoMap[pid] || {};
+                const promoLabel = promo.nom ? promo.nom.replace('Promotion ', '') : 'Sans promo';
+                const yearLabel = promo.annee_debut && promo.annee_fin ? `${promo.annee_debut}-${promo.annee_fin}` : '';
                 return (
-                  <div key={a.activite_id} className="px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" data-testid={`global-aprog-${a.activite_id}`}>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      {at && <span className="px-1 py-0 rounded text-[9px] font-bold text-white" style={{ backgroundColor: at.couleur || '#94a3b8' }}>{at.nom}</span>}
-                      <span className="text-[10px] text-slate-500 font-mono">{ue.code_ue}</span>
-                      <span className="text-[9px] text-slate-400 ml-auto">{promo.nom?.replace('Promotion ', '')}</span>
+                  <div key={pid} className="border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50/50 dark:bg-slate-800/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-[10px] font-bold">{promoLabel}</span>
+                      {yearLabel && <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">{yearLabel}</span>}
+                      <span className="text-[10px] text-slate-500 ml-auto">— {items.length} séance{items.length > 1 ? 's' : ''}</span>
                     </div>
-                    <div className="text-[11px] font-medium truncate">{a.nom || '(sans intitulé)'}</div>
-                    <div className="text-[9px] text-slate-500">{a.heures}h{a.semaine_souhaitee ? ` · ${String(a.semaine_souhaitee).startsWith('S') ? a.semaine_souhaitee : 'S' + a.semaine_souhaitee}` : ''}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {items.map(a => {
+                        const at = atMap[a.type_activite_id] || {};
+                        const ue = ueMap[a.ue_id] || {};
+                        const color = at.couleur || '#94a3b8';
+                        return (
+                          <div key={a.activite_id}
+                            draggable={isAdmin}
+                            onDragStart={(e) => {
+                              setDragActivite(a);
+                              e.dataTransfer.effectAllowed = 'copy';
+                              e.dataTransfer.setData('text/plain', a.activite_id);
+                            }}
+                            onDragEnd={() => { setDragActivite(null); setDragOverDay(null); }}
+                            title={`${at.nom || ''} ${ue.code_ue || ''} — ${a.nom || ''} (${a.heures}h)${a.semaine_souhaitee ? ' · ' + a.semaine_souhaitee : ' · sans semaine'}`}
+                            className="inline-flex flex-col items-center justify-center px-2.5 py-1.5 rounded-full border-2 cursor-grab active:cursor-grabbing hover:shadow-md transition text-center min-w-[60px]"
+                            style={{ borderColor: color, backgroundColor: color + '20' }}
+                            data-testid={`global-aprog-${a.activite_id}`}>
+                            <span className="text-[10px] font-bold leading-tight" style={{ color }}>{at.nom || '?'}</span>
+                            <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-200 leading-tight">{ue.code_ue || ''}</span>
+                            <span className="text-[8px] text-slate-500 leading-tight">{a.heures}h{!a.semaine_souhaitee ? ' · à programmer' : ''}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
@@ -668,6 +730,11 @@ export default function PlanningGlobal() {
       {dragingSession && (
         <div className={`fixed top-3 left-1/2 -translate-x-1/2 z-[200] text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium ${dragOverSidebar ? 'bg-rose-600' : 'bg-violet-600'}`}>
           {dragOverSidebar ? 'Lâchez pour déprogrammer la séance' : 'Glissez sur "À programmer" pour déprogrammer'}
+        </div>
+      )}
+      {dragActivite && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] bg-violet-600 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium">
+          Déposez "{dragActivite.nom || 'la séquence'}" sur un jour du planning
         </div>
       )}
 

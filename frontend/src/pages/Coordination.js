@@ -70,8 +70,13 @@ const ActiviteRow = memo(function ActiviteRow({
   const badge = at ? TYPE_BADGE[at.nom] : null;
 
   return (
-    <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
-      <td className="px-2 py-1.5 text-slate-400 text-center">{idx + 1}</td>
+    <tr className={`border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30 ${!act.semaine_souhaitee ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
+      <td className="px-2 py-1.5 text-slate-400 text-center relative">
+        {idx + 1}
+        {!act.semaine_souhaitee && (
+          <span className="absolute -left-0.5 top-1/2 -translate-y-1/2 w-1 h-5 bg-amber-400 rounded-r" title="À programmer (pas de semaine)" />
+        )}
+      </td>
       <td className="px-2 py-1">
         <Input
           className="h-8 text-xs border-0 shadow-none focus-visible:ring-1"
@@ -370,6 +375,7 @@ export function FichesProjets() {
         const acts = fiche.activites || [];
         const totalH = acts.reduce((s, a) => s + (parseFloat(a.heures) || 0), 0);
         const planned = acts.filter(a => a.session_id).length;
+        const noWeek = acts.filter(a => !a.semaine_souhaitee).length;
         const isCollapsed = collapsed[fiche.id];
         return (
           <Card key={fiche.id} className="overflow-hidden" data-testid={`fiche-${fiche.id}`}>
@@ -381,6 +387,7 @@ export function FichesProjets() {
               </button>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-blue-200">{acts.length} séquence{acts.length !== 1 ? 's' : ''} · {totalH.toFixed(1)}h{planned > 0 && ` · ${planned}/${acts.length} planifiées`}</span>
+                {noWeek > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-amber-950 font-bold">{noWeek} à programmer</span>}
                 {isAdmin && <Button size="sm" variant="ghost" className="h-7 text-xs text-white hover:bg-blue-800" onClick={() => addActivite(fiche.id)} data-testid={`add-line-${fiche.id}`}><Plus size={12} className="mr-1" />Ligne</Button>}
               </div>
             </div>
