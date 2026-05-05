@@ -316,6 +316,49 @@ async def list_sessions(request: Request, promotion_id: Optional[str] = None, fo
         q["annee_scolaire_id"] = annee_scolaire_id
     return await crud_list("sessions", q, sort=[("date", 1), ("heure_debut", 1)])
 
+async def _auto_link_session_to_fiche(session: dict):
+    """Auto-link a session to a matching fiche.activite if not already linked."""
+    if not session or not session.get("ue_id"):
+        return
+    sess_id = session.get("id")
+    promo = session.get("promotion_id") or ""
+    ue_id = session.get("ue_id")
+    intitule = (session.get("intitule") or "").strip().lower()
+    # Already linked?
+    already = await db.fiches_projet.find_one({"activites.session_id": sess_id}, {"_id": 0})
+    if already:
+        return
+    # Find matching fiche.activite without session_id, prefer same intitule
+    fiches = await db.fiches_projet.find({"ue_id": ue_id}, {"_id": 0}).to_list(2000)
+    for f in fiches:
+        if f.get("promotion_id") and promo and f.get("promotion_id") != promo:
+            continue
+        for act in f.get("activites", []):
+            if act.get("session_id"):
+                continue
+            act_promo = act.get("promotion_id") or ""
+            if act_promo and promo and act_promo != promo:
+                continue
+            act_nom = (act.get("nom") or "").strip().lower()
+            if intitule and act_nom and intitule != act_nom:
+                continue
+            # Match found
+            act["session_id"] = sess_id
+            await db.fiches_projet.update_one({"id": f["id"]}, {"$set": {"activites": f["activites"]}})
+            return
+
+async def _unlink_session_everywhere(session_id: str):
+    """Remove session_id from any fiche.activite that references it."""
+    cursor = db.fiches_projet.find({"activites.session_id": session_id}, {"_id": 0})
+    async for f in cursor:
+        changed = False
+        for act in f.get("activites", []):
+            if act.get("session_id") == session_id:
+                act.pop("session_id", None)
+                changed = True
+        if changed:
+            await db.fiches_projet.update_one({"id": f["id"]}, {"$set": {"activites": f["activites"]}})
+
 @api_router.post("/sessions")
 async def create_session(request: Request):
     await require_admin(request)
@@ -332,7 +375,9 @@ async def create_session(request: Request):
             b["duree"] = round(diff, 2)
         except:
             b["duree"] = 0
-    return await crud_create("sessions", b)
+    created = await crud_create("sessions", b)
+    await _auto_link_session_to_fiche(created)
+    return created
 
 @api_router.put("/sessions/{id}")
 async def update_session(id: str, request: Request):
@@ -350,11 +395,21 @@ async def update_session(id: str, request: Request):
             b["duree"] = round(diff, 2)
         except:
             pass
-    return await crud_update("sessions", id, b)
+    updated = await crud_update("sessions", id, b)
+    await _auto_link_session_to_fiche(updated)
+    return updated
 
 @api_router.delete("/sessions/{id}")
 async def delete_session(id: str, request: Request):
     await require_admin(request)
+    await _unlink_session_everywhere(id)
+    return await crud_delete("sessions", id)
+
+@api_router.post("/sessions/{id}/deprogrammer")
+async def deprogrammer_session(id: str, request: Request):
+    """Supprime la séance et restaure son activité fiche en 'à programmer'."""
+    await require_admin(request)
+    await _unlink_session_everywhere(id)
     return await crud_delete("sessions", id)
 
 @api_router.post("/sessions/{id}/duplicate")

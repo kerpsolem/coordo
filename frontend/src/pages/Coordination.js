@@ -58,7 +58,11 @@ export function FichesProjets() {
   const [formateurs, setFormateurs] = useState([]);
   const [filterPromo, setFilterPromo] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
+  const [filterDomain, setFilterDomain] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all'); // all | a_programmer | programme
+  const [domains, setDomains] = useState([]);
   const [collapsed, setCollapsed] = useState({});
+  const [allCollapsed, setAllCollapsed] = useState(true);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneForm, setCloneForm] = useState({ source_promotion_id: '', target_promotion_id: '', replace_existing: false });
   const [cloneLoading, setCloneLoading] = useState(false);
@@ -68,16 +72,27 @@ export function FichesProjets() {
       const params = {};
       if (filterPromo !== 'all') params.promotion_id = filterPromo;
       if (filterSemestre !== 'all') params.semestre = filterSemestre;
-      const [fr, ur, pr, ar, fmr] = await Promise.all([
+      const [fr, ur, pr, ar, fmr, dr] = await Promise.all([
         API.get('/fiches-projet', { params }),
         API.get('/ues'), API.get('/promotions'),
-        API.get('/activity-types'), API.get('/formateurs')
+        API.get('/activity-types'), API.get('/formateurs'),
+        API.get('/domains')
       ]);
-      setFiches(fr.data); setUes(ur.data); setPromotions(pr.data); setActTypes(ar.data); setFormateurs(fmr.data);
+      setFiches(fr.data); setUes(ur.data); setPromotions(pr.data); setActTypes(ar.data); setFormateurs(fmr.data); setDomains(dr.data);
     } catch (e) { console.error(e); }
   }, [filterPromo, filterSemestre]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-collapse all UEs on first load
+  useEffect(() => {
+    if (allCollapsed && fiches.length > 0) {
+      const c = {};
+      fiches.forEach(f => { c[f.id] = true; });
+      setCollapsed(c);
+      setAllCollapsed(false);
+    }
+  }, [fiches, allCollapsed]);
 
   const ueMap = Object.fromEntries(ues.map(u => [u.id, u]));
   const fmMap = Object.fromEntries(formateurs.map(f => [f.id, f]));
@@ -162,8 +177,21 @@ export function FichesProjets() {
     setCloneLoading(false);
   };
 
+  // Apply client-side filters: domain, status (a_programmer/programme)
+  const filteredFiches = fiches.filter(f => {
+    const ue = ueMap[f.ue_id];
+    if (filterDomain !== 'all' && ue?.domain_id !== filterDomain) return false;
+    if (filterStatus !== 'all') {
+      const acts = f.activites || [];
+      if (filterStatus === 'a_programmer' && !acts.some(a => !a.session_id)) return false;
+      if (filterStatus === 'programme' && !acts.some(a => a.session_id)) return false;
+    }
+    return true;
+  });
+  // Count sequences without week
+  const seqWithoutWeek = filteredFiches.reduce((sum, f) => sum + (f.activites || []).filter(a => !a.semaine_souhaitee).length, 0);
   // Sort fiches: by UE code then promo
-  const sortedFiches = [...fiches].sort((a, b) => {
+  const sortedFiches = [...filteredFiches].sort((a, b) => {
     const ua = ueMap[a.ue_id]?.code_ue || '';
     const ub = ueMap[b.ue_id]?.code_ue || '';
     return ua.localeCompare(ub);
@@ -178,20 +206,39 @@ export function FichesProjets() {
       <div className="flex flex-wrap items-end justify-between gap-3 px-1">
         <div className="flex items-end gap-2 flex-wrap">
           <Select value={filterPromo} onValueChange={setFilterPromo}>
-            <SelectTrigger className="h-9 w-44 text-sm" data-testid="filter-promo"><SelectValue placeholder="Promotion" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-44 text-sm" data-testid="filter-promo"><SelectValue placeholder="Toutes les promos" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Toutes les promos</SelectItem>
               {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterSemestre} onValueChange={setFilterSemestre}>
-            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue placeholder="Semestre" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue placeholder="Tous semestres" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tous semestres</SelectItem>
               {['S1','S2','S3','S4','S5','S6'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
-          <span className="text-xs text-slate-500 ml-2">{sortedFiches.length} UEs affichées</span>
+          <Select value={filterDomain} onValueChange={setFilterDomain}>
+            <SelectTrigger className="h-9 w-40 text-sm border-blue-400" data-testid="filter-domain"><SelectValue placeholder="Tous les domaines" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les domaines</SelectItem>
+              {domains.map(d => <SelectItem key={d.id} value={d.id}>{d.nom}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="h-9 w-44 text-sm" data-testid="filter-status"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous statuts</SelectItem>
+              <SelectItem value="a_programmer">À programmer</SelectItem>
+              <SelectItem value="programme">Programmé</SelectItem>
+            </SelectContent>
+          </Select>
+          {seqWithoutWeek > 0 && (
+            <span className="px-3 py-1.5 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-300 text-orange-700 text-xs font-semibold">
+              {seqWithoutWeek} séquence{seqWithoutWeek > 1 ? 's' : ''} sans semaine
+            </span>
+          )}
         </div>
         {isAdmin && (
           <div className="flex gap-2 flex-wrap">
