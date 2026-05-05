@@ -20,61 +20,67 @@ Gérer plannings pédagogiques, charges des formateurs, répartition des cours, 
 
 ### Modules métiers
 - CRUD complet : promotions, formateurs, UE, domaines, types d'activités, sites, groupes, années scolaires
-- Sessions (création, édition, drag & drop, redimensionnement, duplication, multi-jours, journée entière 7h, type Stage avec cap 35h/sem)
-- Absences : récurrence hebdomadaire / **bi-mensuelle**, période **matin / après-midi / journée**, archivage auto
-- Attribution des copies par formateur (calculs auto minutes/copie)
-- Pense-bêtes (sticky notes avec horodatage)
-- Tableau de bord (filtres date / promo / semestre / année scolaire / **Cours uniquement**)
-- Récap heures (table par formateur/UE/promo + onglet **Graphiques** : 6 charts recharts)
-- Alertes (filtre période : semestre / année scolaire / personnalisée)
+- Sessions (création, édition, drag & drop, redimensionnement, duplication, multi-jours, journée entière → 2 demi-journées 7h, type Stage avec cap 35h/sem, **auto-link** vers fiche projet, **/deprogrammer** restaure l'activité)
+- Absences : récurrence hebdomadaire / bi-mensuelle, période matin / après-midi / journée
+- Coordination consolidée (3 onglets) : Séances, Fiches projets, Vacances
+- Alertes **enrichies** (catégories : chevauchement / surcharge / sans_formateur / conflit_absence / autre + badges Auto + résolution locale)
+- Récap heures (table + onglet Graphiques 6 charts recharts)
+- Tableau de bord (filtres date / promo / semestre / année scolaire)
 
 ### Planning Global
 - Vue semaine multi-promos (côte à côte ou empilé), drag & drop horaire ET inter-jour
-- Affichage **jours fériés français** (couleur violette distincte)
-- Création par clic-glisser / multi-jours (date_debut → date_fin) / journée entière 8h30-16h30
-- Bouton **"Tous les formateurs"** dans la sélection
-- Avertissement à la création sur jour férié
+- Jours fériés français + Vacances par promo
+- **Sidebar "À programmer"** + drag-drop d'un bloc vers la sidebar pour déprogrammer
+- Filtres Promo, Semestre, **Formateur**, **Type de cours**
+- Texte agrandi sur les blocs (intitulé, UE, initiales formateurs)
+- **Tooltip enrichie** au survol (UE titre, type+couleur, horaire, formateurs avec badge ID, promo, lieu, statut)
 
 ### Planning Macro
-- Timeline annuelle multi-mois avec zoom
-- Drag & drop entre semaines
-- **Bouton Dupliquer** au survol des séances
-- **Sidebar "À programmer"** : activités issues des fiches projet groupées par UE, drag-and-drop vers semaine, indicateur N/M, sync auto
+- Timeline annuelle multi-mois avec zoom + filtres domaines + mois
+- **Sidebar "À programmer"** : items avec **badge type** (CM/TD/...), drag vers semaine pour planifier, drop d'une séance dessus pour la déprogrammer
+- Tooltip détaillée
 
-### Coordination - Fiches projet (NOUVEAU)
-- Onglet `/coordination` (sidebar : "Coordination · Fiches projet")
-- CRUD fiches : UE + semestre + promotion + N activités
-- Activités : nom, heures, promotion, taille (entière/demi/quart), ordre (flèches haut/bas)
-- Lien automatique vers planning macro via colonne "À programmer"
+### Coordination > Fiches Projets
+- UE **repliées par défaut** + boutons Tout déplier/replier
+- Filtres Promotion, Semestre, **Domaine**, **Statut** (À programmer / Programmé)
+- Champ **Temps (h) agrandi** (h-8 w-20)
+- **Saisie fluide** (mémoïsation ActiviteRow + debounce 500ms, plus de lag)
+- Auto-save vers backend toutes les 600ms
+
+### Coordination > Séances modale
+- **Champ Groupe** (Promo entière / groupes filtrés sur promo)
 
 ### Endpoints clés
 - POST/GET/PUT/DELETE /api/fiches-projet
 - GET /api/fiches-projet/a-programmer
 - POST /api/fiches-projet/{id}/activites/{aid}/link-session, unlink-session
-- POST /api/sessions/bulk (multi_day / stage, exclude_holidays)
-- GET /api/holidays?year= ou ?date_debut=&date_fin=
+- POST /api/sessions/bulk
+- POST /api/sessions/{id}/deprogrammer (supprime + déslie l'activité fiche)
+- GET /api/holidays
+- GET /api/alerts → schema enrichi {category, title, context, auto, heure_debut, heure_fin, ...}
 - POST /api/auth/change-password
-- POST /api/access-requests, PATCH /api/access-requests/{id}, DELETE
+- POST /api/access-requests, PATCH/DELETE /api/access-requests/{id}
 - DELETE /api/users/{id}
 
-## Date Log
-- 2026-04 : MVP livré (template + auth + CRUD + planning global/macro/promotion/formateur)
-- 2026-04 : Drag & drop + zoom + filtres + dashboard avec graph
-- 2026-04 : Demande d'accès + change password + delete user (P0)
-- 2026-04 : Onglet Graphiques du Récap Heures (6 charts)
-- 2026-04 : **Phase 1-4** (jours fériés FR, sessions/bulk, fiches projet, absences bi-mensuelle/periode, Alertes period mode, Dashboard Cours-only, PlanningGlobal jours fériés/journée entière/multi-jours/all formateurs/horizontal D&D, PlanningMacro Duplicate + sidebar À programmer, nouvel onglet Coordination)
-
 ## Test Status
-- Backend : 12/12 pytest PASS (iteration_2.json)
-- Frontend : 100% des flows testés OK
+- Backend : 5/5 iter4 PASS (test_iter4_ux_batch.py) + 6/6 iter3 + 12/12 iter2
+- Frontend : 100% des flows iter4 testés OK
 - Credentials : admin@ifsi.fr / Admin123!
 
 ## Known Backlog (P2)
-- Améliorer la vue "Par Promotion" (selon photo partagée précédemment)
-- Notifications visuelles (Toasts) après chaque sauvegarde dans toute l'app
-- Refactor server.py (1400+ lignes) en routers séparés
+- Refactor server.py (~2100 lignes) en routers (auth, sessions, fiches_projet, vacances, dashboard, alerts)
+- Replace native date/time pickers (modale Séance) par shadcn Calendar + select 24h
+- Pagination/filtre par défaut sur Alertes (volume actuel ~80 alertes/an)
+- Pre-fill complet (Type + Formateurs) lors d'un click sur "À programmer" depuis Coordination
+- Pre-existing test failures (TestUserDelete, TestSessionsBulk) à mettre à jour (hors-scope)
+- DialogContent a11y warning Radix (Missing Description)
+
+## Date Log
+- 2026-04 : MVP livré
+- 2026-04 : Phases 1-4 (jours fériés, fiches projet, sessions/bulk, absences enrichies)
+- 2026-05 : **Iter4 UX batch** — Coordination Fiches Projets (UE repliées, filtres, fix lag), Planning Global (sidebar À programmer + drag-déprogrammer + filtres formateur/type + texte agrandi + tooltip enrichie), Planning Macro (drag-déprogrammer + badge type sidebar), modale Coordination (Groupe), Alertes (refonte + catégories + Auto + résolution locale)
 
 ## Architecture Notes
 - /app/backend/server.py : tout le backend (à splitter à terme)
 - /app/frontend/src/pages : 1 fichier par page
-- /app/frontend/src/components/Layout.js : sidebar + auth dialogs
+- /app/frontend/src/pages/Coordination.js : composant ActiviteRow mémoïsé pour fluidité de saisie
