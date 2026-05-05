@@ -33,6 +33,7 @@ export default function PlanningMacro() {
   const [preSaisie, setPreSaisie] = useState(null);
   const [dragSession, setDragSession] = useState(null);
   const [dragOverWeek, setDragOverWeek] = useState(null);
+  const [dragOverSidebar, setDragOverSidebar] = useState(false);
   const [aProgrammer, setAProgrammer] = useState([]);
   const [dragActivite, setDragActivite] = useState(null); // activity from sidebar
 
@@ -179,7 +180,7 @@ export default function PlanningMacro() {
     setDragSession(null);
   };
 
-  const handleDragEnd = () => { setDragSession(null); setDragOverWeek(null); setDragActivite(null); };
+  const handleDragEnd = () => { setDragSession(null); setDragOverWeek(null); setDragActivite(null); setDragOverSidebar(false); };
 
   const duplicateSession = async (id, e) => {
     e.stopPropagation();
@@ -268,12 +269,24 @@ export default function PlanningMacro() {
 
       {/* Layout: sidebar "À programmer" + timeline */}
       <div className="flex gap-3">
-        {/* Sidebar À programmer */}
-        <Card className="w-72 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar">
-          <div className="px-3 py-2 border-b bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+        {/* Sidebar À programmer (also a drop zone to "deprogram" sessions) */}
+        <Card className="w-72 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar"
+          onDragOver={(e) => { if (dragSession) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverSidebar(true); } }}
+          onDragLeave={() => setDragOverSidebar(false)}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setDragOverSidebar(false);
+            if (!dragSession || !isAdmin) return;
+            try {
+              await API.post(`/sessions/${dragSession.id}/deprogrammer`);
+              setDragSession(null);
+              loadData();
+            } catch (err) { console.error(err); setDragSession(null); }
+          }}>
+          <div className={`px-3 py-2 border-b bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between ${dragOverSidebar ? 'bg-rose-100 dark:bg-rose-950/30' : ''}`}>
             <div className="flex items-center gap-2">
               <ListTodo size={14} className="text-violet-600" />
-              <span className="text-sm font-semibold">A programmer</span>
+              <span className="text-sm font-semibold">{dragOverSidebar ? 'Déposer ici pour déprogrammer' : 'À programmer'}</span>
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 font-bold">{aProgrammer.length}</span>
           </div>
@@ -295,6 +308,16 @@ export default function PlanningMacro() {
                     <div className="space-y-1">
                       {items.map(a => {
                         const promo = promoMap[a.promotion_id] || {};
+                        const at = atMap[a.type_activite_id];
+                        const TYPE_BADGE_COLOR = {
+                          CM: { bg: 'bg-yellow-300', text: 'text-yellow-900' },
+                          CMo: { bg: 'bg-blue-300', text: 'text-blue-900' },
+                          TD: { bg: 'bg-green-300', text: 'text-green-900' },
+                          TP: { bg: 'bg-orange-300', text: 'text-orange-900' },
+                          TPG: { bg: 'bg-orange-400', text: 'text-orange-900' },
+                          EVAL: { bg: 'bg-red-300', text: 'text-red-900' },
+                        };
+                        const tb = at && TYPE_BADGE_COLOR[at.nom];
                         return (
                           <div key={a.activite_id}
                             draggable={isAdmin}
@@ -306,9 +329,12 @@ export default function PlanningMacro() {
                             onDragEnd={handleDragEnd}
                             className="px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-violet-400 cursor-grab active:cursor-grabbing"
                             data-testid={`a-prog-${a.activite_id}`}>
-                            <div className="text-[11px] font-medium truncate">{a.nom}</div>
+                            <div className="flex items-center gap-1.5">
+                              {at && <span className={`px-1 py-0 rounded text-[9px] font-bold ${tb?.bg || 'bg-slate-200'} ${tb?.text || ''}`}>{at.nom}</span>}
+                              <div className="text-[11px] font-medium truncate flex-1">{a.nom}</div>
+                            </div>
                             <div className="flex items-center justify-between mt-0.5">
-                              <span className="text-[9px] text-slate-500">{a.heures}h · {(a.taille_groupe || 'promo_entiere').replace('_', ' ')}</span>
+                              <span className="text-[9px] text-slate-500">{a.heures}h · {(a.taille_groupe || 'promo entière')}</span>
                               {promo.nom && <span className="text-[9px] text-slate-400">{promo.nom.replace('Promotion ', '')}</span>}
                             </div>
                           </div>
@@ -445,8 +471,8 @@ export default function PlanningMacro() {
 
       {/* Drag indicator */}
       {dragSession && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium">
-          Deplacez vers une autre semaine puis validez
+        <div className={`fixed top-3 left-1/2 -translate-x-1/2 z-[200] text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium ${dragOverSidebar ? 'bg-rose-600' : 'bg-blue-600'}`}>
+          {dragOverSidebar ? 'Lâchez pour déprogrammer la séance' : 'Déposez sur une autre semaine ou sur "À programmer" pour déprogrammer'}
         </div>
       )}
       {dragActivite && (

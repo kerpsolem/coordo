@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
-import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, GripVertical, ZoomIn, ZoomOut, MessageSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, GripVertical, ZoomIn, ZoomOut, MessageSquare, ListTodo, MapPin, Clock, GraduationCap } from 'lucide-react';
 import { format, addDays, startOfWeek, getWeek, addWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -41,6 +41,11 @@ export default function PlanningGlobal() {
   const [hoveredSession, setHoveredSession] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [filterFormateur, setFilterFormateur] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [aProgrammer, setAProgrammer] = useState([]);
+  const [dragOverSidebar, setDragOverSidebar] = useState(false);
+  const [dragingSession, setDraggingSession] = useState(null); // for "deprogrammer" drag
 
   const [dragInfo, setDragInfo] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
@@ -50,8 +55,8 @@ export default function PlanningGlobal() {
 
   const PX_PER_MIN = 1.2 * zoom;
   const GRID_H = Math.round(TOTAL_MIN * PX_PER_MIN);
-  const baseFontBlock = Math.round(10 * zoom);
-  const baseFontSmall = Math.round(9 * zoom);
+  const baseFontBlock = Math.round(11 * zoom);
+  const baseFontSmall = Math.round(10 * zoom);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekNum = getWeek(currentDate, { weekStartsOn: 1 });
@@ -64,17 +69,19 @@ export default function PlanningGlobal() {
     if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
-      const [sessR, absR, holR, vacR, proR, fmR, atR, ueR, domR, sitR, grpR] = await Promise.all([
+      const [sessR, absR, holR, vacR, proR, fmR, atR, ueR, domR, sitR, grpR, apR] = await Promise.all([
         API.get('/sessions', { params }), API.get('/absences/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/holidays', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/vacances/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/promotions'), API.get('/formateurs'), API.get('/activity-types'),
-        API.get('/ues'), API.get('/domains'), API.get('/sites'), API.get('/groups')
+        API.get('/ues'), API.get('/domains'), API.get('/sites'), API.get('/groups'),
+        API.get('/fiches-projet/a-programmer', { params: selectedPromos.size === 1 ? { promotion_id: [...selectedPromos][0] } : {} })
       ]);
       setSessions(sessR.data); setAbsences(absR.data); setHolidays(holR.data);
       setVacances(vacR.data);
       setPromotions(proR.data); setFormateurs(fmR.data);
       setActTypes(atR.data); setUes(ueR.data); setDomains(domR.data); setSites(sitR.data); setGroups(grpR.data);
+      setAProgrammer(apR.data || []);
     } catch (e) { console.error(e); }
   }, [currentDate, selectedPromos, filterSemestre]);
 
@@ -274,11 +281,22 @@ export default function PlanningGlobal() {
     const at = atMap[s.type_activite_id] || {};
     const ue = ueMap[s.ue_id] || {};
     const grp = grpMap[s.group_id] || {};
-    const formNames = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
+    const formInits = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
     const isDragging = dragInfo?.sessionId === s.id;
+    const fontInit = Math.round(11 * zoom);
 
     return (
       <div key={s.id} data-testid={`session-block-${s.id}`}
+        draggable={isAdmin}
+        onDragStart={(e) => {
+          if (!isAdmin) return;
+          e.stopPropagation();
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', s.id);
+          setDraggingSession(s);
+          setHoveredSession(null);
+        }}
+        onDragEnd={() => { setDraggingSession(null); setDragOverSidebar(false); }}
         className={`planning-block px-1 py-0.5 overflow-hidden border-l-2 leading-tight h-full relative select-none
           ${isDragging ? 'opacity-40' : 'cursor-pointer'}`}
         style={{ backgroundColor: at.couleur ? `${at.couleur}25` : '#e2e8f0', borderLeftColor: at.couleur || '#94a3b8', fontSize: baseFontBlock }}
@@ -292,8 +310,8 @@ export default function PlanningGlobal() {
           </div>
         )}
         <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
-          <span className="font-bold" style={{ color: at.couleur }}>{at.nom}</span>
-          {ue.code_ue && <span className="text-slate-500" style={{ fontSize: baseFontSmall }}>{ue.code_ue}</span>}
+          <span className="font-bold" style={{ color: at.couleur, fontSize: baseFontBlock + 1 }}>{at.nom}</span>
+          {ue.code_ue && <span className="text-slate-600 dark:text-slate-300 font-semibold" style={{ fontSize: baseFontSmall + 1 }}>{ue.code_ue}</span>}
           {s.statut === 'Valide' && (
             <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400" style={{ fontSize: baseFontSmall - 1 }}>
               <Check size={baseFontSmall} /> V
@@ -305,9 +323,9 @@ export default function PlanningGlobal() {
             </span>
           )}
         </div>
-        {s.intitule && <div className="truncate text-slate-600 dark:text-slate-300" style={{ fontSize: baseFontSmall }}>{s.intitule}</div>}
+        {s.intitule && <div className="truncate text-slate-700 dark:text-slate-200 font-medium" style={{ fontSize: baseFontSmall + 1 }}>{s.intitule}</div>}
         <div className="text-slate-500" style={{ fontSize: baseFontSmall }}>{s.heure_debut}-{s.heure_fin}{grp.libelle ? ` · ${grp.libelle}` : ''}</div>
-        <div className="font-bold text-black">{formNames}</div>
+        <div className="font-bold text-blue-700 dark:text-blue-300" style={{ fontSize: fontInit }}>{formInits}</div>
         {s.commentaire && (
           <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 truncate" style={{ fontSize: baseFontSmall - 1 }}>
             <MessageSquare size={baseFontSmall - 1} />{s.commentaire}
@@ -347,35 +365,82 @@ export default function PlanningGlobal() {
     const s = hoveredSession, at = atMap[s.type_activite_id] || {}, promo = promoMap[s.promotion_id] || {};
     const ue = ueMap[s.ue_id] || {}, dom = domMap[s.domain_id] || domMap[ue.domain_id] || {};
     const site = siteMap[s.site_id] || {}, grp = grpMap[s.group_id] || {};
-    const forms = (s.formateur_ids || []).map(fid => { const f = fmMap[fid]; return f ? `${f.prenom} ${f.nom} (${f.initiales})` : '?'; });
+    const forms = (s.formateur_ids || []).map(fid => fmMap[fid]).filter(Boolean);
+    const dur = ((timeToMin(s.heure_fin || '00:00') - timeToMin(s.heure_debut || '00:00')) / 60).toFixed(1);
     return (
-      <div className="fixed z-[100] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl p-4 w-80 tooltip-enter pointer-events-none"
+      <div className="fixed z-[100] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl p-3 w-80 tooltip-enter pointer-events-none"
         style={{ left: tooltipPos.x, top: tooltipPos.y }}>
-        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: at.couleur }} />
-          <span className="font-bold text-sm">{at.nom}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700">{s.semestre}</span>
-          {s.statut === 'Valide' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">Valide</span>}
-          {s.saisi && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">Saisi</span>}
+        {/* UE big title */}
+        {ue.code_ue && (
+          <div className="flex items-start gap-2 mb-2 pb-2 border-b border-slate-200 dark:border-slate-700">
+            <div className="w-1 self-stretch rounded" style={{ backgroundColor: at.couleur || '#94a3b8' }} />
+            <div className="flex-1">
+              <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 leading-tight">UE {ue.code_ue} — {ue.intitule}</div>
+              {s.intitule && <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{s.intitule}</div>}
+            </div>
+          </div>
+        )}
+        {/* Type + period */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: at.couleur || '#94a3b8' }} />
+          <span className="text-xs font-semibold" style={{ color: at.couleur }}>{at.nom}</span>
+          <span className="text-[10px] text-slate-500">— {at.description || at.nom}</span>
         </div>
-        {s.intitule && <p className="text-sm font-semibold mb-2">{s.intitule}</p>}
-        <div className="grid grid-cols-[100px_1fr] gap-y-1 text-xs">
-          <span className="text-slate-500">Promotion</span><span className="font-medium">{promo.nom}</span>
-          {grp.libelle && <><span className="text-slate-500">Groupe</span><span>{grp.libelle}</span></>}
-          <span className="text-slate-500">UE</span><span>{ue.code_ue} - {ue.intitule}</span>
-          <span className="text-slate-500">Domaine</span><span>{dom.nom}</span>
-          <span className="text-slate-500">Formateurs</span><span>{forms.join(', ')}</span>
-          <span className="text-slate-500">Lieu</span><span>{site.nom || '-'}</span>
-          <span className="text-slate-500">Horaires</span><span className="font-medium">{s.heure_debut} - {s.heure_fin}</span>
-          <span className="text-slate-500">Duree</span><span>{s.duree}h</span>
-          {s.commentaire && <><span className="text-slate-500">Commentaire</span><span className="text-amber-600">{s.commentaire}</span></>}
+        {/* Time */}
+        <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
+          <Clock size={12} className="text-slate-400" />
+          <span className="font-medium">{s.heure_debut} – {s.heure_fin}</span>
+          <span className="text-slate-500">({dur}h)</span>
+        </div>
+        {/* Formateurs */}
+        {forms.length > 0 && (
+          <div className="flex items-start gap-2 mb-1.5">
+            {forms.map((f, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold">{f.initiales}</span>
+                <span className="text-xs text-slate-700 dark:text-slate-200">{f.prenom} {f.nom?.toUpperCase()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Promotion */}
+        {promo.nom && (
+          <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
+            <GraduationCap size={12} className="text-slate-400" />
+            <span>{promo.nom.replace('Promotion ', '')}</span>
+            {grp.libelle && <span className="text-slate-500">· {grp.libelle}</span>}
+          </div>
+        )}
+        {/* Lieu */}
+        {site.nom && (
+          <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
+            <MapPin size={12} className="text-slate-400" />
+            <span>{site.nom}</span>
+          </div>
+        )}
+        {/* Domaine */}
+        {dom.nom && (
+          <div className="flex items-center gap-2 mb-2 text-xs text-slate-700 dark:text-slate-300">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: dom.couleur || '#cbd5e1' }} />
+            <span>{dom.nom}</span>
+          </div>
+        )}
+        {/* Status pill */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex gap-1.5">
+          <span className={`text-[10px] px-2 py-0.5 rounded ${s.statut === 'Valide' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+            {s.statut === 'Valide' ? 'Validé' : 'Prévu'}
+          </span>
+          {s.saisi && <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700">Saisi</span>}
+          {s.commentaire && <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-700 truncate max-w-[180px]">💬 {s.commentaire}</span>}
         </div>
       </div>
     );
   };
 
   const PromoGrid = ({ promoId, promoName }) => {
-    const promoSessions = promoId === 'all' ? sessions : sessions.filter(s => s.promotion_id === promoId);
+    const promoSessions = (promoId === 'all' ? sessions : sessions.filter(s => s.promotion_id === promoId))
+      .filter(s => filterFormateur === 'all' ? true : (s.formateur_ids || []).includes(filterFormateur))
+      .filter(s => filterType === 'all' ? true : s.type_activite_id === filterType);
     return (
       <Card className="overflow-hidden">
         {promoName && <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b font-semibold" style={{ fontSize: 13 * zoom }}>{promoName}</div>}
@@ -521,19 +586,88 @@ export default function PlanningGlobal() {
             {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={filterFormateur} onValueChange={setFilterFormateur}>
+          <SelectTrigger className="w-44 h-8 text-xs" data-testid="filter-formateur"><SelectValue placeholder="Formateur" /></SelectTrigger>
+          <SelectContent className="max-h-72">
+            <SelectItem value="all">Tous les formateurs</SelectItem>
+            {formateurs.map(f => <SelectItem key={f.id} value={f.id}>{f.initiales} - {f.prenom} {f.nom}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-36 h-8 text-xs" data-testid="filter-type"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les types</SelectItem>
+            {actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Button variant={sideByView ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => setSideByView(!sideByView)} data-testid="toggle-side-by-side">
           <Columns size={14} className="mr-1" /> Cote a cote
         </Button>
         {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={() => startNew(format(new Date(), 'yyyy-MM-dd'))} data-testid="new-session-btn"><Plus size={14} className="mr-1" /> Nouvelle</Button>}
       </div>
 
-      {sideByView && displayPromos.length > 1 ? (
-        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${displayPromos.length}, 1fr)` }}>
-          {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={p.nom} />)}
+      {/* Layout: sidebar À programmer + planning grids */}
+      <div className="flex gap-3 items-start">
+        {/* Sidebar with drop-to-deprogram */}
+        <Card className="w-64 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar-global"
+          onDragOver={(e) => { if (dragingSession) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverSidebar(true); } }}
+          onDragLeave={() => setDragOverSidebar(false)}
+          onDrop={async (e) => {
+            e.preventDefault(); setDragOverSidebar(false);
+            if (!dragingSession || !isAdmin) return;
+            try {
+              await API.post(`/sessions/${dragingSession.id}/deprogrammer`);
+              setDraggingSession(null);
+              loadData();
+            } catch (err) { console.error(err); setDraggingSession(null); }
+          }}>
+          <div className={`px-3 py-2 border-b bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between ${dragOverSidebar ? 'bg-rose-100 dark:bg-rose-950/30' : ''}`}>
+            <div className="flex items-center gap-2">
+              <ListTodo size={14} className="text-violet-600" />
+              <span className="text-sm font-semibold">{dragOverSidebar ? 'Déposer pour déprogrammer' : 'À programmer'}</span>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 font-bold">{aProgrammer.length}</span>
+          </div>
+          {aProgrammer.length === 0 ? (
+            <p className="p-3 text-xs text-slate-500">Aucune séquence non programmée. Glissez une séance ici pour la déprogrammer.</p>
+          ) : (
+            <div className="p-2 space-y-2">
+              {aProgrammer.slice(0, 60).map(a => {
+                const at = atMap[a.type_activite_id];
+                const promo = promoMap[a.promotion_id] || {};
+                const ue = ueMap[a.ue_id] || {};
+                return (
+                  <div key={a.activite_id} className="px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" data-testid={`global-aprog-${a.activite_id}`}>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {at && <span className="px-1 py-0 rounded text-[9px] font-bold text-white" style={{ backgroundColor: at.couleur || '#94a3b8' }}>{at.nom}</span>}
+                      <span className="text-[10px] text-slate-500 font-mono">{ue.code_ue}</span>
+                      <span className="text-[9px] text-slate-400 ml-auto">{promo.nom?.replace('Promotion ', '')}</span>
+                    </div>
+                    <div className="text-[11px] font-medium truncate">{a.nom || '(sans intitulé)'}</div>
+                    <div className="text-[9px] text-slate-500">{a.heures}h{a.semaine_souhaitee ? ` · ${String(a.semaine_souhaitee).startsWith('S') ? a.semaine_souhaitee : 'S' + a.semaine_souhaitee}` : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <div className="flex-1 min-w-0">
+          {sideByView && displayPromos.length > 1 ? (
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${displayPromos.length}, 1fr)` }}>
+              {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={p.nom} />)}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={displayPromos.length > 1 ? p.nom : undefined} />)}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="space-y-3">
-          {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={displayPromos.length > 1 ? p.nom : undefined} />)}
+      </div>
+
+      {dragingSession && (
+        <div className={`fixed top-3 left-1/2 -translate-x-1/2 z-[200] text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium ${dragOverSidebar ? 'bg-rose-600' : 'bg-violet-600'}`}>
+          {dragOverSidebar ? 'Lâchez pour déprogrammer la séance' : 'Glissez sur "À programmer" pour déprogrammer'}
         </div>
       )}
 

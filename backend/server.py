@@ -1687,29 +1687,128 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
     sessions = await db.sessions.find({"date": {"$gte": date_debut, "$lte": date_fin}}, {"_id": 0}).to_list(2000)
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
     promotions = {p["id"]: p for p in await crud_list("promotions")}
+    # Map promotion -> school_year nom (best guess via dates)
+    def promo_label(p_id):
+        p = promotions.get(p_id, {})
+        nom = p.get("nom", "?").replace("Promotion ", "")
+        if p.get("annee_debut") and p.get("annee_fin"):
+            return f"{nom} — {p['annee_debut']}-{p['annee_fin']}"
+        return nom
 
     alerts = []
+    # 1) Sans formateur
     for s in sessions:
         if not s.get("formateur_ids"):
-            alerts.append({"type": "warning", "message": f"Seance sans formateur le {s.get('date')} ({s.get('heure_debut')}-{s.get('heure_fin')})",
-                          "session_id": s.get("id"), "date": s.get("date")})
+            alerts.append({
+                "type": "error", "category": "sans_formateur",
+                "title": "Séance sans formateur",
+                "message": "Aucun intervenant assigné à cette séance.",
+                "context": promo_label(s.get("promotion_id")),
+                "session_id": s.get("id"), "date": s.get("date"),
+                "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
+                "auto": True,
+            })
         if not s.get("ue_id"):
-            alerts.append({"type": "warning", "message": f"Seance sans UE le {s.get('date')}",
-                          "session_id": s.get("id"), "date": s.get("date")})
+            alerts.append({
+                "type": "warning", "category": "autre",
+                "title": "Séance sans UE",
+                "message": "Aucune UE rattachée à cette séance.",
+                "context": promo_label(s.get("promotion_id")),
+                "session_id": s.get("id"), "date": s.get("date"),
+                "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
+                "auto": True,
+            })
         if s.get("statut") == "Prevu" and s.get("date", "") < today.isoformat():
-            alerts.append({"type": "info", "message": f"Seance passee non validee le {s.get('date')}",
-                          "session_id": s.get("id"), "date": s.get("date")})
+            alerts.append({
+                "type": "info", "category": "autre",
+                "title": "Séance passée non validée",
+                "message": "Cette séance n'a pas été validée après sa date de réalisation.",
+                "context": promo_label(s.get("promotion_id")),
+                "session_id": s.get("id"), "date": s.get("date"),
+                "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
+                "auto": True,
+            })
 
-    by_date = {}
+    # 2) Chevauchements (overlap entre 2 séances pour le même formateur)
+    seen_overlap = set()
+    for i, s in enumerate(sessions):
+        for j in range(i + 1, len(sessions)):
+            o = sessions[j]
+            if s.get("date") != o.get("date"):
+                continue
+            if not (s.get("heure_debut") and s.get("heure_fin") and o.get("heure_debut") and o.get("heure_fin")):
+                continue
+            overlap = not (o["heure_fin"] <= s["heure_debut"] or s["heure_fin"] <= o["heure_debut"])
+            if not overlap:
+                continue
+            shared = set(s.get("formateur_ids") or []) & set(o.get("formateur_ids") or [])
+            if shared:
+                for fid in shared:
+                    key = (s.get("id"), o.get("id"), fid)
+                    if key in seen_overlap or (o.get("id"), s.get("id"), fid) in seen_overlap:
+                        continue
+                    seen_overlap.add(key)
+                    f = formateurs.get(fid, {})
+                    alerts.append({
+                        "type": "warning", "category": "chevauchement",
+                        "title": "Chevauchement formateur",
+                        "message": f"{f.get('prenom','?')} {f.get('nom','?')} a deux séances qui se chevauchent.",
+                        "context": promo_label(s.get("promotion_id")),
+                        "session_id": s.get("id"), "date": s.get("date"),
+                        "heure_debut": min(s.get("heure_debut"), o.get("heure_debut")),
+                        "heure_fin": max(s.get("heure_fin"), o.get("heure_fin")),
+                        "auto": True,
+                    })
+
+    # 3) Conflit absence : formateur absent le jour d'une séance
+    abs_list = await db.absences.find({"date": {"$gte": date_debut, "$lte": date_fin}}, {"_id": 0}).to_list(5000)
+    abs_by = {}
+    for a in abs_list:
+        abs_by.setdefault((a.get("formateur_id"), a.get("date")), []).append(a)
     for s in sessions:
-        for fid in s.get("formateur_ids", []):
-            key = f"{fid}_{s.get('date')}_{s.get('heure_debut')}"
-            if key in by_date:
-                f = formateurs.get(fid, {})
-                alerts.append({"type": "error",
-                    "message": f"Conflit horaire pour {f.get('prenom','')} {f.get('nom','')} le {s.get('date')} a {s.get('heure_debut')}",
-                    "session_id": s.get("id"), "date": s.get("date")})
-            by_date[key] = True
+        for fid in (s.get("formateur_ids") or []):
+            for a in abs_by.get((fid, s.get("date")), []):
+                # Check periode overlap (matin/apres_midi/journee)
+                p = a.get("periode") or ("journee" if a.get("journee_entiere") else "journee")
+                hd = s.get("heure_debut") or "00:00"
+                hf = s.get("heure_fin") or "00:00"
+                conflict = False
+                if p == "journee":
+                    conflict = True
+                elif p == "matin" and hd < "13:00":
+                    conflict = True
+                elif p == "apres_midi" and hf > "13:00":
+                    conflict = True
+                if conflict:
+                    f = formateurs.get(fid, {})
+                    alerts.append({
+                        "type": "error", "category": "conflit_absence",
+                        "title": "Conflit absence formateur",
+                        "message": f"{f.get('prenom','?')} {f.get('nom','?')} est absent ({p}) mais une séance lui est assignée.",
+                        "context": promo_label(s.get("promotion_id")),
+                        "session_id": s.get("id"), "date": s.get("date"),
+                        "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
+                        "auto": True,
+                    })
+
+    # 4) Surcharge : formateur > 8h le même jour
+    hours_by = {}
+    for s in sessions:
+        for fid in (s.get("formateur_ids") or []):
+            key = (fid, s.get("date"))
+            hours_by[key] = hours_by.get(key, 0) + (s.get("duree") or 0)
+    for (fid, d), h in hours_by.items():
+        if h > 8.5:
+            f = formateurs.get(fid, {})
+            alerts.append({
+                "type": "warning", "category": "surcharge",
+                "title": "Surcharge formateur",
+                "message": f"{f.get('prenom','?')} {f.get('nom','?')} cumule {h:.1f}h sur cette journée (>8h).",
+                "context": d,
+                "session_id": None, "date": d,
+                "heure_debut": None, "heure_fin": None,
+                "auto": True,
+            })
 
     return alerts
 

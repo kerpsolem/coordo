@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import API from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/card';
@@ -23,17 +23,15 @@ const GROUPES_PRESETS = ['Promo entière', 'Groupe 1', 'Groupe 2', 'Groupe 3', '
 // Build list of ISO weeks from a Date by going N weeks forward and back
 function buildWeekOptions(refDate = new Date(), backWeeks = 8, fwdWeeks = 60) {
   const opts = [];
-  // Get Monday of refDate week
   const d = new Date(refDate);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const refMon = new Date(d.setDate(diff));
   for (let i = -backWeeks; i <= fwdWeeks; i++) {
     const mon = new Date(refMon);
     mon.setDate(refMon.getDate() + i * 7);
     const fri = new Date(mon);
     fri.setDate(mon.getDate() + 4);
-    // ISO week
     const tmp = new Date(Date.UTC(mon.getFullYear(), mon.getMonth(), mon.getDate()));
     tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
     const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
@@ -48,6 +46,119 @@ function buildWeekOptions(refDate = new Date(), backWeeks = 8, fwdWeeks = 60) {
   }
   return opts;
 }
+
+// ----- Memoized row to avoid re-render of all rows on each keystroke -----
+const ActiviteRow = memo(function ActiviteRow({
+  ficheId, idx, act, isAdmin, atMap, actTypes, formateurs, fmMap, weekOptions, onUpdate, onRemove
+}) {
+  const [localNom, setLocalNom] = useState(act.nom || '');
+  const [localHeures, setLocalHeures] = useState(act.heures ?? '');
+  const [localRemarques, setLocalRemarques] = useState(act.remarques || '');
+  const debTimer = useRef(null);
+
+  // Sync if act changes externally (e.g. after server save)
+  useEffect(() => { setLocalNom(act.nom || ''); }, [act.nom]);
+  useEffect(() => { setLocalHeures(act.heures ?? ''); }, [act.heures]);
+  useEffect(() => { setLocalRemarques(act.remarques || ''); }, [act.remarques]);
+
+  const scheduleUpdate = (patch) => {
+    clearTimeout(debTimer.current);
+    debTimer.current = setTimeout(() => onUpdate(ficheId, idx, patch), 500);
+  };
+
+  const at = atMap[act.type_activite_id];
+  const badge = at ? TYPE_BADGE[at.nom] : null;
+
+  return (
+    <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+      <td className="px-2 py-1.5 text-slate-400 text-center">{idx + 1}</td>
+      <td className="px-2 py-1">
+        <Input
+          className="h-8 text-xs border-0 shadow-none focus-visible:ring-1"
+          placeholder="Intitulé..."
+          value={localNom}
+          onChange={(e) => { setLocalNom(e.target.value); scheduleUpdate({ nom: e.target.value }); }}
+          onBlur={() => { clearTimeout(debTimer.current); onUpdate(ficheId, idx, { nom: localNom }); }}
+          disabled={!isAdmin}
+        />
+      </td>
+      <td className="px-1 py-1">
+        {isAdmin ? (
+          <Select value={act.type_activite_id || ''} onValueChange={(v) => onUpdate(ficheId, idx, { type_activite_id: v })}>
+            <SelectTrigger className={`h-8 px-1.5 text-[11px] font-bold border-0 shadow-none ${badge ? `${badge.bg} ${badge.text}` : ''}`}>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent>{actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}</SelectContent>
+          </Select>
+        ) : (
+          at && <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${badge?.bg || 'bg-slate-200'} ${badge?.text || ''}`}>{at.nom}</span>
+        )}
+      </td>
+      <td className="px-1 py-1">
+        <Input
+          type="number" step="0.5" min="0"
+          className="h-8 w-20 text-sm font-semibold text-center border border-slate-200 dark:border-slate-700 shadow-none focus-visible:ring-1"
+          value={localHeures}
+          onChange={(e) => { setLocalHeures(e.target.value); scheduleUpdate({ heures: parseFloat(e.target.value) || 0 }); }}
+          onBlur={() => { clearTimeout(debTimer.current); onUpdate(ficheId, idx, { heures: parseFloat(localHeures) || 0 }); }}
+          disabled={!isAdmin}
+          data-testid={`act-heures-${ficheId}-${idx}`}
+        />
+      </td>
+      <td className="px-1 py-1 text-center">
+        <button type="button" onClick={() => isAdmin && onUpdate(ficheId, idx, { obligatoire: !act.obligatoire })} disabled={!isAdmin}
+          className={`w-5 h-5 rounded inline-flex items-center justify-center ${act.obligatoire ? 'bg-blue-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+          {act.obligatoire && <Check size={12} className="text-white" />}
+        </button>
+      </td>
+      <td className="px-1 py-1">
+        {isAdmin ? (
+          <Select value={act.semaine_souhaitee || ''} onValueChange={(v) => onUpdate(ficheId, idx, { semaine_souhaitee: v === '__none__' ? '' : v })}>
+            <SelectTrigger className="h-8 text-[11px] border-0 shadow-none"><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="__none__">— (aucune)</SelectItem>
+              {weekOptions.map(w => <SelectItem key={`${w.year}-${w.week}`} value={w.value}>{w.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ) : <span className="text-[11px]">{act.semaine_souhaitee || '—'}</span>}
+      </td>
+      <td className="px-1 py-1">
+        {isAdmin ? (
+          <Select value={act.taille_groupe || 'Promo entière'} onValueChange={(v) => onUpdate(ficheId, idx, { taille_groupe: v })}>
+            <SelectTrigger className="h-8 text-[11px] border-0 shadow-none"><SelectValue /></SelectTrigger>
+            <SelectContent>{GROUPES_PRESETS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+          </Select>
+        ) : <span className="text-[11px]">{act.taille_groupe}</span>}
+      </td>
+      <td className="px-1 py-1">
+        {isAdmin ? (
+          <FormateurMultiSelect formateurs={formateurs} selected={act.formateur_ids || []} onChange={(ids) => onUpdate(ficheId, idx, { formateur_ids: ids })} />
+        ) : (
+          <span className="text-[11px]" title={(act.formateur_ids || []).map(id => fmMap[id] && `${fmMap[id].prenom} ${fmMap[id].nom}`).filter(Boolean).join(', ')}>
+            {(act.formateur_ids || []).map(id => fmMap[id]?.initiales).filter(Boolean).join(', ')}
+          </span>
+        )}
+      </td>
+      <td className="px-2 py-1">
+        <Input
+          className="h-8 text-xs border-0 shadow-none focus-visible:ring-1"
+          placeholder="Remarques..."
+          value={localRemarques}
+          onChange={(e) => { setLocalRemarques(e.target.value); scheduleUpdate({ remarques: e.target.value }); }}
+          onBlur={() => { clearTimeout(debTimer.current); onUpdate(ficheId, idx, { remarques: localRemarques }); }}
+          disabled={!isAdmin}
+        />
+      </td>
+      <td className="px-1 py-1 text-right">
+        {isAdmin && (
+          <button onClick={() => onRemove(ficheId, idx)} className="text-red-400 hover:text-red-600 p-1" data-testid={`remove-act-${ficheId}-${idx}`}>
+            <Trash2 size={12} />
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+});
 
 export function FichesProjets() {
   const { isAdmin } = useAuth();
@@ -100,25 +211,24 @@ export function FichesProjets() {
   const atByName = Object.fromEntries(actTypes.map(a => [a.nom, a]));
   const weekOptions = buildWeekOptions();
 
-  // Auto-save with debounce per fiche
+  // Save with debounce per fiche
   const saveFiche = async (fiche) => {
     try {
       await API.put(`/fiches-projet/${fiche.id}`, fiche);
     } catch (e) { console.error('Save failed:', e); }
   };
 
-  const updateActivite = (ficheId, idx, patch) => {
+  const updateActivite = useCallback((ficheId, idx, patch) => {
     setFiches(prev => prev.map(f => {
       if (f.id !== ficheId) return f;
       const acts = [...(f.activites || [])];
       acts[idx] = { ...acts[idx], ...patch };
       const updated = { ...f, activites: acts };
-      // Debounced save
       clearTimeout(window[`__save_${ficheId}`]);
       window[`__save_${ficheId}`] = setTimeout(() => saveFiche(updated), 600);
       return updated;
     }));
-  };
+  }, []);
 
   const addActivite = (ficheId) => {
     setFiches(prev => prev.map(f => {
@@ -138,7 +248,7 @@ export function FichesProjets() {
     }));
   };
 
-  const removeActivite = (ficheId, idx) => {
+  const removeActivite = useCallback((ficheId, idx) => {
     setFiches(prev => prev.map(f => {
       if (f.id !== ficheId) return f;
       const acts = [...(f.activites || [])];
@@ -147,7 +257,7 @@ export function FichesProjets() {
       saveFiche(updated);
       return updated;
     }));
-  };
+  }, []);
 
   const importUEs = async () => {
     try {
@@ -177,7 +287,6 @@ export function FichesProjets() {
     setCloneLoading(false);
   };
 
-  // Apply client-side filters: domain, status (a_programmer/programme)
   const filteredFiches = fiches.filter(f => {
     const ue = ueMap[f.ue_id];
     if (filterDomain !== 'all' && ue?.domain_id !== filterDomain) return false;
@@ -188,18 +297,21 @@ export function FichesProjets() {
     }
     return true;
   });
-  // Count sequences without week
   const seqWithoutWeek = filteredFiches.reduce((sum, f) => sum + (f.activites || []).filter(a => !a.semaine_souhaitee).length, 0);
-  // Sort fiches: by UE code then promo
   const sortedFiches = [...filteredFiches].sort((a, b) => {
     const ua = ueMap[a.ue_id]?.code_ue || '';
     const ub = ueMap[b.ue_id]?.code_ue || '';
     return ua.localeCompare(ub);
   });
 
+  const toggleAll = (open) => {
+    const c = {};
+    sortedFiches.forEach(f => { c[f.id] = !open; });
+    setCollapsed(c);
+  };
+
   return (
     <div className="space-y-3" data-testid="fiches-projets-tab">
-      {/* Filters and actions */}
       <Card className="p-4 bg-blue-900 dark:bg-blue-950 text-white border-0">
         <h2 className="text-center text-base font-bold tracking-wider uppercase">Déroulement des séquences de l'UE</h2>
       </Card>
@@ -234,6 +346,8 @@ export function FichesProjets() {
               <SelectItem value="programme">Programmé</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => toggleAll(true)} data-testid="expand-all-fiches">Tout déplier</Button>
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => toggleAll(false)} data-testid="collapse-all-fiches">Tout replier</Button>
           {seqWithoutWeek > 0 && (
             <span className="px-3 py-1.5 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-300 text-orange-700 text-xs font-semibold">
               {seqWithoutWeek} séquence{seqWithoutWeek > 1 ? 's' : ''} sans semaine
@@ -249,7 +363,6 @@ export function FichesProjets() {
         )}
       </div>
 
-      {/* Liste des fiches par UE */}
       {sortedFiches.length === 0 ? (
         <Card className="py-10 text-center text-sm text-slate-500">Aucune fiche projet. Cliquez sur "Importer UE" pour démarrer.</Card>
       ) : sortedFiches.map(fiche => {
@@ -260,9 +373,8 @@ export function FichesProjets() {
         const isCollapsed = collapsed[fiche.id];
         return (
           <Card key={fiche.id} className="overflow-hidden" data-testid={`fiche-${fiche.id}`}>
-            {/* Header bleu nuit */}
             <div className="bg-blue-900 dark:bg-blue-950 text-white px-4 py-2.5 flex items-center justify-between">
-              <button onClick={() => setCollapsed(c => ({ ...c, [fiche.id]: !c[fiche.id] }))} className="flex items-center gap-2 hover:opacity-80">
+              <button onClick={() => setCollapsed(c => ({ ...c, [fiche.id]: !c[fiche.id] }))} className="flex items-center gap-2 hover:opacity-80" data-testid={`toggle-fiche-${fiche.id}`}>
                 {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 <span className="font-bold text-sm">{ue?.code_ue || 'UE ?'} — {ue?.intitule || ''}</span>
                 {fiche.semestre && <span className="text-[10px] px-1.5 py-0.5 bg-blue-700 rounded">{fiche.semestre}</span>}
@@ -273,7 +385,6 @@ export function FichesProjets() {
               </div>
             </div>
 
-            {/* Tableau */}
             {!isCollapsed && (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -282,7 +393,7 @@ export function FichesProjets() {
                       <th className="px-2 py-1.5 text-left w-10">N°</th>
                       <th className="px-2 py-1.5 text-left">Intitulé de la séquence</th>
                       <th className="px-2 py-1.5 text-left w-20">Type</th>
-                      <th className="px-2 py-1.5 text-center w-16">Temps (h)</th>
+                      <th className="px-2 py-1.5 text-center w-24">Temps (h)</th>
                       <th className="px-2 py-1.5 text-center w-16">Oblig.</th>
                       <th className="px-2 py-1.5 text-left w-44">N° Sem. souhaitée</th>
                       <th className="px-2 py-1.5 text-left w-32">Taille groupe</th>
@@ -295,71 +406,22 @@ export function FichesProjets() {
                     {acts.length === 0 && (
                       <tr><td colSpan={10} className="text-center py-4 text-slate-400">Aucune séquence. Cliquez "Ligne" pour ajouter.</td></tr>
                     )}
-                    {acts.map((act, idx) => {
-                      const at = atMap[act.type_activite_id];
-                      const badge = at ? TYPE_BADGE[at.nom] : null;
-                      return (
-                        <tr key={idx} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                          <td className="px-2 py-1.5 text-slate-400 text-center">{idx + 1}</td>
-                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Intitulé..." value={act.nom || ''} onChange={e => updateActivite(fiche.id, idx, { nom: e.target.value })} disabled={!isAdmin} /></td>
-                          <td className="px-1 py-1">
-                            {isAdmin ? (
-                              <Select value={act.type_activite_id || ''} onValueChange={v => updateActivite(fiche.id, idx, { type_activite_id: v })}>
-                                <SelectTrigger className={`h-7 px-1.5 text-[11px] font-bold border-0 shadow-none ${badge ? `${badge.bg} ${badge.text}` : ''}`}>
-                                  <SelectValue placeholder="—" />
-                                </SelectTrigger>
-                                <SelectContent>{actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}</SelectContent>
-                              </Select>
-                            ) : (
-                              at && <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${badge?.bg || 'bg-slate-200'} ${badge?.text || ''}`}>{at.nom}</span>
-                            )}
-                          </td>
-                          <td className="px-1 py-1"><Input type="number" step="0.1" min="0" className="h-7 text-xs text-center border-0 shadow-none focus-visible:ring-1" value={act.heures ?? ''} onChange={e => updateActivite(fiche.id, idx, { heures: parseFloat(e.target.value) || 0 })} disabled={!isAdmin} /></td>
-                          <td className="px-1 py-1 text-center">
-                            <button type="button" onClick={() => isAdmin && updateActivite(fiche.id, idx, { obligatoire: !act.obligatoire })} disabled={!isAdmin}
-                              className={`w-5 h-5 rounded inline-flex items-center justify-center ${act.obligatoire ? 'bg-blue-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
-                              {act.obligatoire && <Check size={12} className="text-white" />}
-                            </button>
-                          </td>
-                          <td className="px-1 py-1">
-                            {isAdmin ? (
-                              <Select value={act.semaine_souhaitee || ''} onValueChange={v => updateActivite(fiche.id, idx, { semaine_souhaitee: v === '__none__' ? '' : v })}>
-                                <SelectTrigger className="h-7 text-[11px] border-0 shadow-none"><SelectValue placeholder="—" /></SelectTrigger>
-                                <SelectContent className="max-h-72">
-                                  <SelectItem value="__none__">— (aucune)</SelectItem>
-                                  {weekOptions.map(w => <SelectItem key={`${w.year}-${w.week}`} value={w.value}>{w.label}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            ) : <span className="text-[11px]">{act.semaine_souhaitee || '—'}</span>}
-                          </td>
-                          <td className="px-1 py-1">
-                            {isAdmin ? (
-                              <Select value={act.taille_groupe || 'Promo entière'} onValueChange={v => updateActivite(fiche.id, idx, { taille_groupe: v })}>
-                                <SelectTrigger className="h-7 text-[11px] border-0 shadow-none"><SelectValue /></SelectTrigger>
-                                <SelectContent>{GROUPES_PRESETS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                              </Select>
-                            ) : <span className="text-[11px]">{act.taille_groupe}</span>}
-                          </td>
-                          <td className="px-1 py-1">
-                            {isAdmin ? (
-                              <FormateurMultiSelect formateurs={formateurs} selected={act.formateur_ids || []} onChange={ids => updateActivite(fiche.id, idx, { formateur_ids: ids })} />
-                            ) : (
-                              <span className="text-[11px]" title={(act.formateur_ids || []).map(id => fmMap[id] && `${fmMap[id].prenom} ${fmMap[id].nom}`).filter(Boolean).join(', ')}>
-                                {(act.formateur_ids || []).map(id => fmMap[id]?.initiales).filter(Boolean).join(', ')}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-2 py-1"><Input className="h-7 text-xs border-0 shadow-none focus-visible:ring-1" placeholder="Remarques..." value={act.remarques || ''} onChange={e => updateActivite(fiche.id, idx, { remarques: e.target.value })} disabled={!isAdmin} /></td>
-                          <td className="px-1 py-1 text-right">
-                            {isAdmin && (
-                              <button onClick={() => removeActivite(fiche.id, idx)} className="text-red-400 hover:text-red-600 p-1" data-testid={`remove-act-${fiche.id}-${idx}`}>
-                                <Trash2 size={12} />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {acts.map((act, idx) => (
+                      <ActiviteRow
+                        key={`${fiche.id}-${idx}`}
+                        ficheId={fiche.id}
+                        idx={idx}
+                        act={act}
+                        isAdmin={isAdmin}
+                        atMap={atMap}
+                        actTypes={actTypes}
+                        formateurs={formateurs}
+                        fmMap={fmMap}
+                        weekOptions={weekOptions}
+                        onUpdate={updateActivite}
+                        onRemove={removeActivite}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -368,7 +430,6 @@ export function FichesProjets() {
         );
       })}
 
-      {/* Clone Dialog */}
       <Dialog open={showCloneDialog} onOpenChange={setShowCloneDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Cloner depuis une promotion</DialogTitle></DialogHeader>
@@ -410,7 +471,7 @@ function FormateurMultiSelect({ formateurs, selected, onChange }) {
   const display = sel.map(id => formateurs.find(f => f.id === id)?.initiales).filter(Boolean).join(', ');
   return (
     <div className="relative">
-      <button type="button" onClick={() => setOpen(!open)} className="w-full h-7 px-2 text-[11px] text-left rounded hover:bg-slate-100 dark:hover:bg-slate-800 truncate" title={display}>
+      <button type="button" onClick={() => setOpen(!open)} className="w-full h-8 px-2 text-[11px] text-left rounded hover:bg-slate-100 dark:hover:bg-slate-800 truncate" title={display}>
         {display || <span className="text-slate-400">Choisir...</span>}
       </button>
       {open && (
@@ -436,7 +497,6 @@ function FormateurMultiSelect({ formateurs, selected, onChange }) {
   );
 }
 
-// Default export = standalone page (kept for backwards compatibility)
 export default function Coordination() {
   return <div className="space-y-4" data-testid="coordination-page"><FichesProjets /></div>;
 }

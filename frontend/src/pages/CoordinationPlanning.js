@@ -351,6 +351,18 @@ export default function CoordinationPlanning() {
                 </Select>
               </div>
               <div>
+                <Label>Groupe</Label>
+                <Select value={editSession.group_id || 'none'} onValueChange={v => setEditSession({ ...editSession, group_id: v === 'none' ? '' : v })}>
+                  <SelectTrigger data-testid="session-group"><SelectValue placeholder="Promo entière" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Promo entière</SelectItem>
+                    {groups.filter(g => !editSession.promotion_id || g.promotion_id === editSession.promotion_id).map(g => (
+                      <SelectItem key={g.id} value={g.id}>{g.libelle}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label>UE</Label>
                 <Select value={editSession.ue_id || ''} onValueChange={v => setEditSession({ ...editSession, ue_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Choisir" /></SelectTrigger>
