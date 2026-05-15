@@ -193,7 +193,7 @@ export default function RecapHeures() {
           <TabsTrigger value="type">Par type</TabsTrigger>
           <TabsTrigger value="semaine">Par semaine</TabsTrigger>
           <TabsTrigger value="semestre">Par semestre</TabsTrigger>
-          <TabsTrigger value="ue">Par UE</TabsTrigger>
+          <TabsTrigger value="ue" data-testid="recap-ue-tab">Par UE</TabsTrigger>
           <TabsTrigger value="graphiques" data-testid="tab-graphiques"><BarChart3 size={14} className="mr-1" />Graphiques</TabsTrigger>
         </TabsList>
 
@@ -260,7 +260,7 @@ export default function RecapHeures() {
           </CardContent></Card>
         </TabsContent>
 
-        <TabsContent value="ue" data-testid="recap-ue-tab">
+        <TabsContent value="ue" data-testid="recap-ue-content">
           <Card>
             <CardContent className="p-0">
               {ueData && (
