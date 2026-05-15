@@ -32,6 +32,8 @@ export default function RecapHeures() {
   const [actTypes, setActTypes] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
   const [view, setView] = useState('formateur');
+  const [ueData, setUeData] = useState(null);
+  const [expandedUe, setExpandedUe] = useState({});
 
   useEffect(() => {
     const today = new Date();
@@ -60,14 +62,19 @@ export default function RecapHeures() {
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
 
     try {
-      const [recRes, fmRes, prRes, atRes, syRes] = await Promise.all([
-        API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types'), API.get('/school-years')
+      const params2 = { date_debut: dd, date_fin: df };
+      if (filterPromo !== 'all') params2.promotion_id = filterPromo;
+      if (filterSemestre !== 'all') params2.semestre = filterSemestre;
+      const [recRes, fmRes, prRes, atRes, syRes, ueRes] = await Promise.all([
+        API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types'), API.get('/school-years'),
+        API.get('/recap-ue', { params: params2 })
       ]);
       setData(recRes.data);
       setFormateurs(fmRes.data);
       setPromotions(prRes.data);
       setActTypes(atRes.data);
       setSchoolYears(syRes.data);
+      setUeData(ueRes.data);
     } catch (e) { console.error(e); }
   }, [dateDebut, dateFin, filterFormateur, filterPromo, filterType, filterSemestre, filterAnneeSco, schoolYears]);
 
@@ -253,13 +260,96 @@ export default function RecapHeures() {
           </CardContent></Card>
         </TabsContent>
 
-        <TabsContent value="ue">
-          <Card><CardContent className="p-0">
-            <Table><TableHeader><TableRow><TableHead>UE</TableHead><TableHead>Heures</TableHead></TableRow></TableHeader>
-              <TableBody>{data?.par_ue && Object.entries(data.par_ue).sort((a, b) => b[1] - a[1]).map(([name, h]) => (
-                <TableRow key={name}><TableCell>{name}</TableCell><TableCell className="font-bold">{h.toFixed(1)}h</TableCell></TableRow>
-              ))}</TableBody></Table>
-          </CardContent></Card>
+        <TabsContent value="ue" data-testid="recap-ue-tab">
+          <Card>
+            <CardContent className="p-0">
+              {ueData && (
+                <div className="px-3 py-2 border-b bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <span className="font-semibold">Détail par UE — formule temps formateur : <span className="font-mono text-violet-600">heures × nb_formateurs × nb_groupes</span></span>
+                  <div className="flex gap-4">
+                    <span>Total heures : <span className="font-bold">{(ueData.total_heures || 0).toFixed(1)}h</span></span>
+                    <span>Total temps formateur : <span className="font-bold text-violet-700">{(ueData.total_temps_formateur || 0).toFixed(1)}h</span></span>
+                  </div>
+                </div>
+              )}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead>UE</TableHead>
+                    <TableHead>Domaine</TableHead>
+                    <TableHead className="text-right">Total heures</TableHead>
+                    <TableHead>Répartition par type</TableHead>
+                    <TableHead className="text-right">Temps formateur</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(ueData?.rows || []).map(row => {
+                    const expanded = expandedUe[row.ue_id];
+                    return (
+                      <>
+                        <TableRow key={row.ue_id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" onClick={() => setExpandedUe(s => ({ ...s, [row.ue_id]: !s[row.ue_id] }))}>
+                          <TableCell className="px-2 text-slate-400">{expanded ? '▾' : '▸'}</TableCell>
+                          <TableCell className="font-semibold"><span className="font-mono mr-1.5">{row.ue_code}</span>{row.ue_intitule}</TableCell>
+                          <TableCell>
+                            {row.domain_nom && <span className="inline-flex items-center gap-1 text-[11px]"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: row.domain_couleur || '#cbd5e1' }} />{row.domain_nom}</span>}
+                          </TableCell>
+                          <TableCell className="text-right font-bold">{row.total_heures.toFixed(1)}h</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(row.par_type).sort((a, b) => b[1] - a[1]).map(([t, h]) => (
+                                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800"><span className="font-semibold">{t}</span> {h.toFixed(1)}h</span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-violet-700">{row.total_temps_formateur.toFixed(1)}h</TableCell>
+                        </TableRow>
+                        {expanded && (
+                          <TableRow key={`${row.ue_id}-detail`} className="bg-slate-50/60 dark:bg-slate-900/40">
+                            <TableCell></TableCell>
+                            <TableCell colSpan={5}>
+                              <div className="py-2 space-y-2">
+                                <div>
+                                  <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">Temps formateur par type</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Object.entries(row.par_type_tf).sort((a, b) => b[1] - a[1]).map(([t, h]) => (
+                                      <span key={t} className="text-[11px] px-2 py-0.5 rounded border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-violet-700"><span className="font-semibold">{t}</span> · {h.toFixed(1)}h</span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <details className="text-[11px]">
+                                  <summary className="cursor-pointer text-slate-500 hover:text-slate-700">Voir le détail des séances/activités ({row.details.length})</summary>
+                                  <table className="w-full mt-2 text-[11px]">
+                                    <thead className="text-slate-500"><tr><th className="text-left px-2 py-1">Source</th><th className="text-left">Date / Nom</th><th>Type</th><th className="text-right">H</th><th className="text-right">Nb form.</th><th className="text-right">Nb gpes</th><th className="text-right">TF</th></tr></thead>
+                                    <tbody>
+                                      {row.details.map((d, i) => (
+                                        <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                                          <td className="px-2 py-0.5">{d.source === 'session' ? '📅 séance' : '📝 fiche'}</td>
+                                          <td>{d.source === 'session' ? d.date : (d.nom || '—')}</td>
+                                          <td className="text-center">{d.type}</td>
+                                          <td className="text-right">{d.heures.toFixed(1)}h</td>
+                                          <td className="text-right">{d.nb_formateurs}</td>
+                                          <td className="text-right">{d.nb_groupes}</td>
+                                          <td className="text-right font-bold text-violet-700">{d.temps_formateur.toFixed(1)}h</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </details>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    );
+                  })}
+                  {(!ueData?.rows || ueData.rows.length === 0) && (
+                    <TableRow><TableCell colSpan={6} className="text-center text-sm text-slate-500 py-6">Aucune donnée sur cette période</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="graphiques" data-testid="graphiques-content">

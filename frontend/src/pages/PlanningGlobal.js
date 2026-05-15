@@ -48,6 +48,8 @@ export default function PlanningGlobal() {
   const [dragingSession, setDraggingSession] = useState(null);
   const [dragActivite, setDragActivite] = useState(null); // activity from sidebar -> drop on grid
   const [dragOverDay, setDragOverDay] = useState(null); // promoId|dayStr while dragging activity
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [selectedDayIdxs, setSelectedDayIdxs] = useState([0, 1, 2, 3, 4]); // Lun=0..Ven=4
 
   const [dragInfo, setDragInfo] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
@@ -62,11 +64,15 @@ export default function PlanningGlobal() {
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekNum = getWeek(currentDate, { weekStartsOn: 1 });
-  const days = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+  const allWeekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+  const days = selectedDayIdxs.length > 0
+    ? selectedDayIdxs.slice().sort((a, b) => a - b).map(i => addDays(weekStart, i))
+    : allWeekDays;
+  const nbDays = days.length;
 
   const loadData = useCallback(async () => {
-    const dateDebut = format(days[0], 'yyyy-MM-dd');
-    const dateFin = format(days[4], 'yyyy-MM-dd');
+    const dateDebut = format(allWeekDays[0], 'yyyy-MM-dd');
+    const dateFin = format(allWeekDays[4], 'yyyy-MM-dd');
     const params = { date_debut: dateDebut, date_fin: dateFin };
     if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
@@ -192,6 +198,19 @@ export default function PlanningGlobal() {
   // ---- Drop an activity from "À programmer" sidebar onto a day column ----
   const dropActivityOnDay = async (act, promoId, dayStr) => {
     if (!isAdmin || !act) return;
+    // Validate: activity promotion must match the target column promotion
+    if (act.promotion_id && promoId && promoId !== 'all' && act.promotion_id !== promoId) {
+      alert(`Impossible : cette séquence concerne la promotion "${promoMap[act.promotion_id]?.nom || '?'}" et vous l'avez déposée sur "${promoMap[promoId]?.nom || '?'}".`);
+      setDragActivite(null); setDragOverDay(null);
+      return;
+    }
+    // Validate: activity semestre must match the active semestre filter (if any concrete S1..S6)
+    if (filterSemestre !== 'all' && !['pair', 'impair'].includes(filterSemestre)
+        && act.semestre && act.semestre !== filterSemestre) {
+      alert(`Impossible : cette séquence est en ${act.semestre} alors que le planning affiche ${filterSemestre}.`);
+      setDragActivite(null); setDragOverDay(null);
+      return;
+    }
     try {
       const heures = parseFloat(act.heures) || 2;
       const heDeb = '08:00';
@@ -215,6 +234,14 @@ export default function PlanningGlobal() {
       setDragActivite(null); setDragOverDay(null);
       loadData();
     } catch (e) { console.error(e); setDragActivite(null); setDragOverDay(null); }
+  };
+
+  // Check whether an activity is droppable on a target promo/semestre column (used to highlight valid zones)
+  const isDropAllowed = (act, promoId) => {
+    if (!act) return false;
+    if (act.promotion_id && promoId && promoId !== 'all' && act.promotion_id !== promoId) return false;
+    if (filterSemestre !== 'all' && !['pair', 'impair'].includes(filterSemestre) && act.semestre && act.semestre !== filterSemestre) return false;
+    return true;
   };
 
   // ---- MOVE/RESIZE existing sessions ----
@@ -475,7 +502,7 @@ export default function PlanningGlobal() {
       <Card className="overflow-hidden">
         {promoName && <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b font-semibold" style={{ fontSize: 13 * zoom }}>{promoName}</div>}
         <div className="overflow-x-auto">
-          <div className="grid" style={{ gridTemplateColumns: `${Math.round(50 * zoom)}px repeat(5, 1fr)`, minWidth: Math.round(700 * zoom) }}>
+          <div className="grid" style={{ gridTemplateColumns: `${Math.round(50 * zoom)}px repeat(${nbDays}, 1fr)`, minWidth: Math.round((100 + nbDays * 130) * zoom) }}>
             <div className="border-b border-r border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/30" />
             {days.map((day, i) => {
               const dayStr = format(day, 'yyyy-MM-dd');
@@ -521,12 +548,12 @@ export default function PlanningGlobal() {
               const vacanceNom = vacancesByPromo[promoId]?.[dayStr];
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
               return (
-                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''} ${dragOverDay === `${promoId}|${dayStr}` ? 'ring-2 ring-violet-400 ring-inset bg-violet-50/40' : ''}`} style={{ height: GRID_H }}
+                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''} ${dragOverDay === `${promoId}|${dayStr}` ? 'ring-2 ring-violet-400 ring-inset bg-violet-50/40' : ''} ${dragActivite && !isDropAllowed(dragActivite, promoId) ? 'opacity-50' : ''}`} style={{ height: GRID_H }}
                   data-day={dayStr}
                   onMouseDown={(e) => handleGridMouseDown(e, dayStr)}
-                  onDragOver={(e) => { if (dragActivite) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverDay(`${promoId}|${dayStr}`); } }}
+                  onDragOver={(e) => { if (dragActivite && isDropAllowed(dragActivite, promoId)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverDay(`${promoId}|${dayStr}`); } }}
                   onDragLeave={() => { if (dragActivite && dragOverDay === `${promoId}|${dayStr}`) setDragOverDay(null); }}
-                  onDrop={(e) => { if (dragActivite) { e.preventDefault(); dropActivityOnDay(dragActivite, promoId, dayStr); } }}>
+                  onDrop={(e) => { if (dragActivite && isDropAllowed(dragActivite, promoId)) { e.preventDefault(); dropActivityOnDay(dragActivite, promoId, dayStr); } }}>
                   {vacanceNom && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                       <span className="text-orange-600 font-bold text-xs uppercase tracking-wide bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded shadow-sm">
@@ -577,7 +604,7 @@ export default function PlanningGlobal() {
           <Button variant="outline" size="sm" onClick={() => setZoom(z => Math.min(2, z + 0.1))} data-testid="zoom-in-global"><ZoomIn size={16} /></Button>
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
           <Button variant="outline" size="sm" onClick={prevWeek} data-testid="prev-week"><ChevronLeft size={16} /></Button>
-          <span className="text-sm font-semibold px-2"><span className="font-bold text-base">S{weekNum}</span> - {format(days[0], "d MMM", { locale: fr })} au {format(days[4], "d MMM yyyy", { locale: fr })}</span>
+          <span className="text-sm font-semibold px-2"><span className="font-bold text-base">S{weekNum}</span> - {format(allWeekDays[0], "d MMM", { locale: fr })} au {format(allWeekDays[4], "d MMM yyyy", { locale: fr })}</span>
           <Button variant="outline" size="sm" onClick={nextWeek} data-testid="next-week"><ChevronRight size={16} /></Button>
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
           <Input type="date" value={format(currentDate, 'yyyy-MM-dd')}
@@ -636,12 +663,43 @@ export default function PlanningGlobal() {
         <Button variant={sideByView ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => setSideByView(!sideByView)} data-testid="toggle-side-by-side">
           <Columns size={14} className="mr-1" /> Cote a cote
         </Button>
+        <Button variant={showSidebar ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => setShowSidebar(s => !s)} data-testid="toggle-sidebar-aprog">
+          <ListTodo size={14} className="mr-1" /> {showSidebar ? 'Masquer à programmer' : 'Afficher à programmer'}
+        </Button>
         {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={() => startNew(format(new Date(), 'yyyy-MM-dd'))} data-testid="new-session-btn"><Plus size={14} className="mr-1" /> Nouvelle</Button>}
+      </div>
+
+      {/* Day selector */}
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <span className="text-[10px] text-slate-500 font-medium mr-1">Jours :</span>
+        {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'].map((label, i) => {
+          const active = selectedDayIdxs.includes(i);
+          return (
+            <button key={i}
+              onClick={() => {
+                setSelectedDayIdxs(prev => {
+                  if (prev.includes(i)) {
+                    const next = prev.filter(x => x !== i);
+                    return next.length === 0 ? [0, 1, 2, 3, 4] : next;
+                  }
+                  return [...prev, i];
+                });
+              }}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors
+                ${active ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
+              data-testid={`day-toggle-${i}`}>
+              {label}
+            </button>
+          );
+        })}
+        <Button variant="ghost" size="sm" className="h-7 text-[11px] ml-1" onClick={() => setSelectedDayIdxs([0, 1, 2, 3, 4])} data-testid="day-all">Tous</Button>
+        <span className="text-[10px] text-slate-400 ml-2">{nbDays} jour{nbDays > 1 ? 's' : ''} affiché{nbDays > 1 ? 's' : ''}</span>
       </div>
 
       {/* Layout: sidebar À programmer + planning grids */}
       <div className="flex gap-3 items-start">
         {/* Sidebar with drop-to-deprogram + draggable pills grouped by promo */}
+        {showSidebar && (
         <Card className="w-80 flex-shrink-0 sticky top-2 self-start max-h-[calc(100vh-180px)] overflow-y-auto" data-testid="a-programmer-sidebar-global"
           onDragOver={(e) => { if (dragingSession) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverSidebar(true); } }}
           onDragLeave={() => setDragOverSidebar(false)}
@@ -715,6 +773,7 @@ export default function PlanningGlobal() {
             </div>
           )}
         </Card>
+        )}
 
         <div className="flex-1 min-w-0">
           {sideByView && displayPromos.length > 1 ? (

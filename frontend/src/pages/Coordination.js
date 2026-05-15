@@ -49,16 +49,18 @@ function buildWeekOptions(refDate = new Date(), backWeeks = 8, fwdWeeks = 60) {
 
 // ----- Memoized row to avoid re-render of all rows on each keystroke -----
 const ActiviteRow = memo(function ActiviteRow({
-  ficheId, idx, act, isAdmin, atMap, actTypes, formateurs, fmMap, weekOptions, onUpdate, onRemove
+  ficheId, idx, act, isAdmin, atMap, actTypes, formateurs, fmMap, weekOptions, groups, onUpdate, onRemove
 }) {
   const [localNom, setLocalNom] = useState(act.nom || '');
   const [localHeures, setLocalHeures] = useState(act.heures ?? '');
+  const [localNbForm, setLocalNbForm] = useState(act.nb_formateurs ?? '');
   const [localRemarques, setLocalRemarques] = useState(act.remarques || '');
   const debTimer = useRef(null);
 
   // Sync if act changes externally (e.g. after server save)
   useEffect(() => { setLocalNom(act.nom || ''); }, [act.nom]);
   useEffect(() => { setLocalHeures(act.heures ?? ''); }, [act.heures]);
+  useEffect(() => { setLocalNbForm(act.nb_formateurs ?? ''); }, [act.nb_formateurs]);
   useEffect(() => { setLocalRemarques(act.remarques || ''); }, [act.remarques]);
 
   const scheduleUpdate = (patch) => {
@@ -129,11 +131,20 @@ const ActiviteRow = memo(function ActiviteRow({
       </td>
       <td className="px-1 py-1">
         {isAdmin ? (
-          <Select value={act.taille_groupe || 'Promo entière'} onValueChange={(v) => onUpdate(ficheId, idx, { taille_groupe: v })}>
-            <SelectTrigger className="h-8 text-[11px] border-0 shadow-none"><SelectValue /></SelectTrigger>
-            <SelectContent>{GROUPES_PRESETS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-          </Select>
-        ) : <span className="text-[11px]">{act.taille_groupe}</span>}
+          <GroupMultiSelect
+            groups={groups || []}
+            tailleGroupe={act.taille_groupe || 'Promo entière'}
+            selected={act.group_ids || []}
+            onChangeTaille={(v) => onUpdate(ficheId, idx, { taille_groupe: v })}
+            onChangeGroups={(ids) => onUpdate(ficheId, idx, { group_ids: ids })}
+          />
+        ) : (
+          <span className="text-[11px]">
+            {(act.group_ids || []).length > 0
+              ? (act.group_ids || []).map(gid => (groups || []).find(g => g.id === gid)?.libelle).filter(Boolean).join(', ')
+              : (act.taille_groupe || 'Promo entière')}
+          </span>
+        )}
       </td>
       <td className="px-1 py-1">
         {isAdmin ? (
@@ -143,6 +154,18 @@ const ActiviteRow = memo(function ActiviteRow({
             {(act.formateur_ids || []).map(id => fmMap[id]?.initiales).filter(Boolean).join(', ')}
           </span>
         )}
+      </td>
+      <td className="px-1 py-1">
+        <Input
+          type="number" min="0" step="1"
+          className="h-8 w-14 text-xs text-center border border-slate-200 dark:border-slate-700 shadow-none focus-visible:ring-1"
+          placeholder="—"
+          value={localNbForm}
+          onChange={(e) => { setLocalNbForm(e.target.value); clearTimeout(debTimer.current); debTimer.current = setTimeout(() => onUpdate(ficheId, idx, { nb_formateurs: e.target.value === '' ? null : parseInt(e.target.value, 10) || null }), 500); }}
+          onBlur={() => { clearTimeout(debTimer.current); onUpdate(ficheId, idx, { nb_formateurs: localNbForm === '' ? null : parseInt(localNbForm, 10) || null }); }}
+          disabled={!isAdmin}
+          data-testid={`act-nbform-${ficheId}-${idx}`}
+        />
       </td>
       <td className="px-2 py-1">
         <Input
@@ -179,6 +202,7 @@ export function FichesProjets() {
   const [domains, setDomains] = useState([]);
   const [collapsed, setCollapsed] = useState({});
   const [allCollapsed, setAllCollapsed] = useState(true);
+  const [groups, setGroups] = useState([]);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneForm, setCloneForm] = useState({ source_promotion_id: '', target_promotion_id: '', replace_existing: false });
   const [cloneLoading, setCloneLoading] = useState(false);
@@ -188,13 +212,13 @@ export function FichesProjets() {
       const params = {};
       if (filterPromo !== 'all') params.promotion_id = filterPromo;
       if (filterSemestre !== 'all') params.semestre = filterSemestre;
-      const [fr, ur, pr, ar, fmr, dr] = await Promise.all([
+      const [fr, ur, pr, ar, fmr, dr, gr] = await Promise.all([
         API.get('/fiches-projet', { params }),
         API.get('/ues'), API.get('/promotions'),
         API.get('/activity-types'), API.get('/formateurs'),
-        API.get('/domains')
+        API.get('/domains'), API.get('/groups')
       ]);
-      setFiches(fr.data); setUes(ur.data); setPromotions(pr.data); setActTypes(ar.data); setFormateurs(fmr.data); setDomains(dr.data);
+      setFiches(fr.data); setUes(ur.data); setPromotions(pr.data); setActTypes(ar.data); setFormateurs(fmr.data); setDomains(dr.data); setGroups(gr.data);
     } catch (e) { console.error(e); }
   }, [filterPromo, filterSemestre]);
 
@@ -403,15 +427,16 @@ export function FichesProjets() {
                       <th className="px-2 py-1.5 text-center w-24">Temps (h)</th>
                       <th className="px-2 py-1.5 text-center w-16">Oblig.</th>
                       <th className="px-2 py-1.5 text-left w-44">N° Sem. souhaitée</th>
-                      <th className="px-2 py-1.5 text-left w-32">Taille groupe</th>
+                      <th className="px-2 py-1.5 text-left w-32">Taille groupe / Groupes</th>
                       <th className="px-2 py-1.5 text-left w-32">Intervenants</th>
+                      <th className="px-2 py-1.5 text-center w-14" title="Nombre de formateurs (optionnel)">Nb form.</th>
                       <th className="px-2 py-1.5 text-left">Remarques</th>
                       <th className="px-2 py-1.5 w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {acts.length === 0 && (
-                      <tr><td colSpan={10} className="text-center py-4 text-slate-400">Aucune séquence. Cliquez "Ligne" pour ajouter.</td></tr>
+                      <tr><td colSpan={11} className="text-center py-4 text-slate-400">Aucune séquence. Cliquez "Ligne" pour ajouter.</td></tr>
                     )}
                     {acts.map((act, idx) => (
                       <ActiviteRow
@@ -425,6 +450,7 @@ export function FichesProjets() {
                         formateurs={formateurs}
                         fmMap={fmMap}
                         weekOptions={weekOptions}
+                        groups={groups.filter(g => !fiche.promotion_id || g.promotion_id === fiche.promotion_id)}
                         onUpdate={updateActivite}
                         onRemove={removeActivite}
                       />
@@ -467,6 +493,52 @@ export function FichesProjets() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Multi-select group preset or specific groups
+function GroupMultiSelect({ groups, tailleGroupe, selected, onChangeTaille, onChangeGroups }) {
+  const [open, setOpen] = useState(false);
+  const sel = selected || [];
+  const display = sel.length > 0
+    ? sel.map(id => groups.find(g => g.id === id)?.libelle).filter(Boolean).join(', ')
+    : (tailleGroupe || 'Promo entière');
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="w-full h-8 px-2 text-[11px] text-left rounded hover:bg-slate-100 dark:hover:bg-slate-800 truncate border border-slate-200 dark:border-slate-700"
+        title={display}>
+        {display || <span className="text-slate-400">Choisir...</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute z-40 top-full left-0 mt-1 w-60 max-h-72 overflow-y-auto bg-white dark:bg-slate-800 rounded-md shadow-lg border border-slate-200 dark:border-slate-700 p-2">
+            <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">Préréglage</div>
+            <Select value={tailleGroupe || 'Promo entière'} onValueChange={(v) => { onChangeTaille(v); if (sel.length > 0) onChangeGroups([]); }}>
+              <SelectTrigger className="h-7 text-[11px]"><SelectValue /></SelectTrigger>
+              <SelectContent>{GROUPES_PRESETS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+            </Select>
+            {groups.length > 0 && (
+              <>
+                <div className="text-[10px] font-bold uppercase text-slate-500 mt-2 mb-1">Groupes spécifiques</div>
+                {groups.map(g => {
+                  const checked = sel.includes(g.id);
+                  return (
+                    <label key={g.id} className="flex items-center gap-2 px-1 py-1 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-700 rounded cursor-pointer">
+                      <input type="checkbox" checked={checked} onChange={(e) => {
+                        onChangeGroups(e.target.checked ? [...sel, g.id] : sel.filter(i => i !== g.id));
+                      }} />
+                      <span className="truncate">{g.libelle}</span>
+                    </label>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

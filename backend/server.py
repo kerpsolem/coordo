@@ -1106,12 +1106,26 @@ async def import_sessions_to_fiches(request: Request):
             fiche_index[key] = fiche
             created_fiches += 1
 
+        # Compute ISO week from session.date for auto semaine_souhaitee
+        semaine = ""
+        try:
+            if s.get("date"):
+                d = datetime.strptime(s["date"], "%Y-%m-%d").date()
+                iso_year, iso_week, _ = d.isocalendar()
+                semaine = f"S{iso_week}"
+        except Exception:
+            semaine = ""
+
         new_act = {
             "id": str(uuid.uuid4()),
             "nom": s.get("intitule") or "(sans intitule)",
             "heures": s.get("duree", 0),
             "promotion_id": promo,
             "taille_groupe": "demi_promo" if s.get("group_id") else "promo_entiere",
+            "group_ids": [s["group_id"]] if s.get("group_id") else [],
+            "nb_formateurs": len(s.get("formateur_ids") or []) or None,
+            "semaine_souhaitee": semaine,
+            "formateur_ids": s.get("formateur_ids") or [],
             "ordre": len(fiche.get("activites", [])),
             "type_activite_id": s.get("type_activite_id") or "",
             "session_id": s.get("id"),
@@ -1602,6 +1616,138 @@ async def recap_hours(date_debut: Optional[str] = None, date_fin: Optional[str] 
         "par_semestre": par_semestre,
         "par_semaine": par_semaine,
         "par_ue": par_ue
+    }
+
+# ===================== RECAP UE (per-UE detail with formateur-time) =====================
+def _nb_groupes_from_taille(taille: str) -> int:
+    """Convert a taille_groupe label to a number of groups.
+    Examples: 'Promo entière'=1, 'Demi-promo'=2, '1/4 promo' or 'Groupe 1..3'=4, '1/8'=8."""
+    if not taille:
+        return 1
+    t = str(taille).lower()
+    if "promo entière" in t or "promo entiere" in t or "promo_entiere" in t:
+        return 1
+    if "demi" in t or "1/2" in t:
+        return 2
+    if "1/4" in t or "quart" in t or "quart_promo" in t:
+        return 4
+    if "1/8" in t or "huitième" in t or "huitieme" in t:
+        return 8
+    if t.startswith("groupe"):
+        # 'Groupe 1', 'Groupe 2', 'Groupe 3' implies splitting in N groups; default 4
+        return 4
+    return 1
+
+@api_router.get("/recap-ue")
+async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] = None,
+                   date_debut: Optional[str] = None, date_fin: Optional[str] = None):
+    """Détail par UE :
+    - total d'heures programmées
+    - répartition par type d'activité
+    - temps formateur total selon la formule: heures × nb_formateurs × nb_groupes
+      (cumulé depuis sessions + activités de fiches projet non liées à une session).
+    """
+    q = {}
+    if date_debut and date_fin:
+        q["date"] = {"$gte": date_debut, "$lte": date_fin}
+    if semestre:
+        if semestre == "pair":
+            q["semestre"] = {"$in": ["S2", "S4", "S6"]}
+        elif semestre == "impair":
+            q["semestre"] = {"$in": ["S1", "S3", "S5"]}
+        else:
+            q["semestre"] = semestre
+    if promotion_id:
+        q["promotion_id"] = promotion_id
+
+    sessions = await db.sessions.find(q, {"_id": 0}).to_list(5000)
+    fiches = await db.fiches_projet.find({}, {"_id": 0}).to_list(2000)
+    ues_list = await crud_list("ues")
+    ues_map = {u["id"]: u for u in ues_list}
+    act_types = {a["id"]: a for a in await crud_list("activity_types")}
+    domains_map = {d["id"]: d for d in await crud_list("domains")}
+
+    by_ue = {}
+    def _ensure(uid):
+        if uid not in by_ue:
+            ue = ues_map.get(uid, {})
+            dom = domains_map.get(ue.get("domain_id"), {})
+            by_ue[uid] = {
+                "ue_id": uid,
+                "ue_code": ue.get("code_ue", "?"),
+                "ue_intitule": ue.get("intitule", "?"),
+                "domain_nom": dom.get("nom", ""),
+                "domain_couleur": dom.get("couleur", ""),
+                "total_heures": 0,
+                "total_temps_formateur": 0,
+                "par_type": {},        # type_nom -> heures
+                "par_type_tf": {},     # type_nom -> temps_formateur
+                "details": [],          # raw rows for drill-down
+            }
+        return by_ue[uid]
+
+    # 1) Sessions (already scheduled)
+    for s in sessions:
+        uid = s.get("ue_id")
+        if not uid:
+            continue
+        bucket = _ensure(uid)
+        dur = float(s.get("duree", 0) or 0)
+        tname = act_types.get(s.get("type_activite_id"), {}).get("nom", "?")
+        nb_form = max(1, len(s.get("formateur_ids") or []))
+        # nb_groupes : 1 si pas de group_id ; >1 si group_id (par défaut 2). Si group_ids list -> len()
+        gids = s.get("group_ids") or ([s["group_id"]] if s.get("group_id") else [])
+        nb_groupes = max(1, len(gids)) if gids else 1
+        tf = dur * nb_form * nb_groupes
+        bucket["total_heures"] += dur
+        bucket["total_temps_formateur"] += tf
+        bucket["par_type"][tname] = bucket["par_type"].get(tname, 0) + dur
+        bucket["par_type_tf"][tname] = bucket["par_type_tf"].get(tname, 0) + tf
+        bucket["details"].append({
+            "source": "session", "id": s.get("id"), "date": s.get("date"),
+            "type": tname, "heures": dur, "nb_formateurs": nb_form,
+            "nb_groupes": nb_groupes, "temps_formateur": tf,
+        })
+
+    # 2) Activités fiche projet (non liées à une session)
+    for f in fiches:
+        if promotion_id and f.get("promotion_id") and f.get("promotion_id") != promotion_id:
+            continue
+        if semestre and semestre not in ("pair", "impair") and f.get("semestre") and f.get("semestre") != semestre:
+            continue
+        uid = f.get("ue_id")
+        if not uid:
+            continue
+        for act in f.get("activites", []):
+            if act.get("session_id"):
+                continue  # already counted via sessions
+            dur = float(act.get("heures", 0) or 0)
+            if dur <= 0:
+                continue
+            tname = act_types.get(act.get("type_activite_id"), {}).get("nom", "?")
+            nb_form = int(act.get("nb_formateurs") or len(act.get("formateur_ids") or []) or 1)
+            gids = act.get("group_ids") or []
+            if gids:
+                nb_groupes = max(1, len(gids))
+            else:
+                nb_groupes = _nb_groupes_from_taille(act.get("taille_groupe", ""))
+            tf = dur * nb_form * nb_groupes
+            bucket = _ensure(uid)
+            bucket["total_heures"] += dur
+            bucket["total_temps_formateur"] += tf
+            bucket["par_type"][tname] = bucket["par_type"].get(tname, 0) + dur
+            bucket["par_type_tf"][tname] = bucket["par_type_tf"].get(tname, 0) + tf
+            bucket["details"].append({
+                "source": "fiche", "id": act.get("id"), "nom": act.get("nom", ""),
+                "type": tname, "heures": dur, "nb_formateurs": nb_form,
+                "nb_groupes": nb_groupes, "temps_formateur": tf,
+            })
+
+    rows = sorted(by_ue.values(), key=lambda x: (x["domain_nom"] or "z", x["ue_code"]))
+    return {
+        "rows": rows,
+        "total_heures": sum(r["total_heures"] for r in rows),
+        "total_temps_formateur": sum(r["total_temps_formateur"] for r in rows),
     }
 
 # ===================== WORKLOAD =====================

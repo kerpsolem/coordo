@@ -1,0 +1,43 @@
+{
+  "summary": "Iter6 backend + frontend tests. Backend: 6/6 new iter6 tests PASS (recap-ue formula, group_ids override, response shape, import-sessions enriched with semaine_souhaitee + nb_formateurs + group_ids + formateur_ids, schema persistence) + 10/10 iter5+iter4 regression PASS. Frontend: all 8 iter6 data-testids present in Planning Global (toggle-sidebar-aprog, day-all, day-toggle-0..4, a-programmer-sidebar-global). RecapHeures > Par UE tab renders formula header 'heures × nb_formateurs × nb_groupes', totaux globaux (75.0h / 87.0h temps formateur), 15 UE rows with pills par type, expansion révèle 'Temps formateur par type' + summary 'Voir le détail des séances/activités'. One CRITICAL frontend bug found and FIXED: PlanningGlobal line 607 crashed with 'RangeError: Invalid time value' when any day was deselected (used days[4] unconditionally — days is dynamic now). Patched to use allWeekDays[4] for the week-range label.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PlanningGlobal week-range label", "issue": "FIXED IN-FLIGHT — format(days[4], ...) threw RangeError 'Invalid time value' whenever the user toggled off any of the 5 days because `days` (=selectedDayIdxs.map(...)) became shorter than 5. The fix swaps days[4] → allWeekDays[4] (header always shows Mon-Fri range). Without this, clicking day-toggle-0..4 immediately crashes the whole page with a runtime error overlay, blocking the entire iter6 day-selector feature.", "selector": "PlanningGlobal.js:607", "priority": "CRITICAL (now fixed)"},
+      {"component": "RecapHeures Par UE tab", "issue": "data-testid='recap-ue-tab' is attached to the TabsContent panel (which is hidden when inactive) instead of the TabsTrigger. As a result, clicking the testid directly does not activate the tab (Playwright error: element not visible). The spec said 'onglet Par UE (data-testid recap-ue-tab)'. Recommend moving the data-testid to the <TabsTrigger value=\"ue\"> element (or duplicating). Tab still works when clicked via text/role.", "selector": "RecapHeures.js TabsContent value='ue'", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_recap_ue_and_import.py",
+    "/app/test_reports/pytest/pytest_iter6.xml"
+  ],
+  "action_items": [
+    "(Already fixed by testing agent) PlanningGlobal week-range label: use allWeekDays[4] instead of days[4] to avoid Invalid-time-value crash when day toggles are partial.",
+    "(Medium) Move data-testid='recap-ue-tab' from TabsContent to the corresponding TabsTrigger so the testid is clickable and visible (matches iter6 spec).",
+    "(Optional) The drop-restriction on bad promo/semestre is implemented via dropActivityOnDay guards (alert message) and isDropAllowed visual opacity-50 — could not E2E drag-test without grid-cell data-testids; only visual confirmation. Adding data-testid='day-cell-{promoId}-{dayStr}' would unlock E2E coverage of the new drop restriction.",
+    "(Optional) Coordination Fiches Projets table columns (Taille groupe / Groupes + Nb form. + act-nbform-* inputs) are only rendered inside each expanded UE group; consider initial expansion or expose count badges for easier test discovery."
+  ],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js now 898 LOC (was 836 — still > 700 LOC threshold). Should be split (e.g., extract DaySelector, SidebarAProgrammer, dropHandlers, headerToolbar).",
+    "server.py 2249 LOC — still well above 700 LOC seuil; routers/per-domain split still recommended.",
+    "Recap-ue endpoint duplicates the nb_groupes computation logic (sessions branch vs fiches branch). Could be extracted into a single helper that accepts an item dict.",
+    "import-sessions writes nb_formateurs = len(formateur_ids) or None — int(0) coerces to None which is acceptable, but the field type ends up mixed (int|None). Doc the convention or use 0.",
+    "Frontend day-toggle UI mutates `selectedDayIdxs` empty array but falls back to allWeekDays inside `days` derivation — good; but loadData (line 74) always reads allWeekDays[0..4] which is correct (loads full week regardless of UI filter)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter6_recap_ue_and_import.py (new — 6 tests, 6/6 passing)",
+    "/app/frontend/src/pages/PlanningGlobal.js (one-line fix on header range label, days[0]/days[4] -> allWeekDays[0]/allWeekDays[4])"
+  ],
+  "success_rate": {"backend": "100% (6/6 iter6 + 10/10 iter5+iter4 regression = 16/16)", "frontend": "100% on observed iter6 toggles + RecapHeures Par UE (after fix)"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "All test fiches/sessions prefixed TEST_iter6_, cleaned up via try/finally (DELETE fiche/session and best-effort sweep of auto_imported fiches).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter6 backend validated end-to-end. Frontend Planning Global toggles + RecapHeures Par UE render correctly. One critical crash was fixed in PlanningGlobal.js (header used days[4] when days could be <5). Open items for main agent: (1) move data-testid='recap-ue-tab' from TabsContent to TabsTrigger; (2) optionally add day-cell data-testid to allow E2E drag-and-drop tests of the new drop-restriction (current alert-based negative path is logically correct but not playwright-testable without grid-cell selectors). Recap-ue formula validated: a=1h*1*1=1, b=1h*1*8=8, c=2h*2*4=16, group_ids override taille_groupe.",
+  "rca of the issue": "PlanningGlobal.js bug RCA: in iter6 the developer introduced `selectedDayIdxs` state and a `days` array computed as map of selected indices, but the existing header label kept referencing days[4] (the original 5th element). When the user clicks any data-testid='day-toggle-N', days becomes length 4 and days[4] is undefined → date-fns format() throws 'RangeError: Invalid time value'. Reproduction: login → /planning-global → click any day-toggle button → red runtime error overlay appears. Mitigation: replaced `format(days[0]...)` and `format(days[4]...)` in the header span with allWeekDays equivalents so the label always shows the full Mon-Fri range regardless of toggle state. Verified: deselecting Lun no longer crashes; deselecting all 5 also OK (fallback to allWeekDays already protected `days`)."
+}
