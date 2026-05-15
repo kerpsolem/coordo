@@ -191,7 +191,11 @@ export default function CoordinationPlanning() {
       const sharesFormateur = (s.formateur_ids || []).some(id => (o.formateur_ids || []).includes(id));
       const sGroups = s.group_ids || (s.group_id ? [s.group_id] : []);
       const oGroups = o.group_ids || (o.group_id ? [o.group_id] : []);
-      const sharesGroup = s.promotion_id === o.promotion_id && sGroups.length > 0 && oGroups.length > 0 && sGroups.some(g => oGroups.includes(g));
+      // Same promo + (intersecting group_ids OR one side = promo entière)
+      const samePromo = s.promotion_id && s.promotion_id === o.promotion_id;
+      const groupsOverlap = sGroups.length > 0 && oGroups.length > 0 && sGroups.some(g => oGroups.includes(g));
+      const promoEntiereCovers = samePromo && (sGroups.length === 0 || oGroups.length === 0);
+      const sharesGroup = samePromo && (groupsOverlap || promoEntiereCovers);
       return sharesFormateur || sharesGroup;
     });
   };
@@ -354,9 +358,11 @@ export default function CoordinationPlanning() {
               </div>
               <div>
                 <Label>Groupes</Label>
-                {(() => {
+                {!editSession.promotion_id ? (
+                  <p className="text-xs text-slate-400 italic mt-1" data-testid="session-group">Sélectionnez d'abord une promotion</p>
+                ) : (() => {
                   const ids = editSession.group_ids || (editSession.group_id ? [editSession.group_id] : []);
-                  const promoGroups = groups.filter(g => !editSession.promotion_id || g.promotion_id === editSession.promotion_id);
+                  const promoGroups = groups.filter(g => g.promotion_id === editSession.promotion_id);
                   return (
                     <div className="flex flex-wrap gap-1.5 mt-1 items-center" data-testid="session-group">
                       <button type="button"
@@ -379,6 +385,7 @@ export default function CoordinationPlanning() {
                         );
                       })}
                       {promoGroups.length === 0 && <span className="text-xs text-slate-400">Aucun groupe défini pour cette promotion</span>}
+                      {ids.length > 0 && <span className="text-[10px] text-slate-500 ml-auto">{ids.length} sélectionné{ids.length > 1 ? 's' : ''}</span>}
                     </div>
                   );
                 })()}

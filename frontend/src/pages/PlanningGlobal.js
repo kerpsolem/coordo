@@ -840,10 +840,12 @@ export default function PlanningGlobal() {
                   <SelectContent>{promotions.map(p=><SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent></Select></div>
               <div className="col-span-2"><Label className="text-xs">Groupes (multi-sélection)</Label>
                 <div className="flex flex-wrap gap-1.5 mt-1 items-center">
-                  {(() => {
+                  {!editSession.promotion_id ? (
+                    <span className="text-[11px] text-slate-400 italic">Sélectionnez d'abord une promotion</span>
+                  ) : (() => {
                     const currentIds = editSession.group_ids || (editSession.group_id ? [editSession.group_id] : []);
-                    const promoGroups = groups.filter(g => !editSession.promotion_id || g.promotion_id === editSession.promotion_id);
-                    const allSelected = promoGroups.length > 0 && currentIds.length === 0;
+                    const promoGroups = groups.filter(g => g.promotion_id === editSession.promotion_id);
+                    const allSelected = currentIds.length === 0;
                     return (
                       <>
                         <button type="button"
@@ -867,6 +869,7 @@ export default function PlanningGlobal() {
                           );
                         })}
                         {promoGroups.length === 0 && <span className="text-[11px] text-slate-400">Aucun groupe défini pour cette promotion</span>}
+                        {currentIds.length > 0 && <span className="text-[10px] text-slate-500 ml-auto">{currentIds.length} groupe{currentIds.length > 1 ? 's' : ''} sélectionné{currentIds.length > 1 ? 's' : ''}</span>}
                       </>
                     );
                   })()}
