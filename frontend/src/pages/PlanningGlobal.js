@@ -337,7 +337,8 @@ export default function PlanningGlobal() {
   const renderBlock = (s) => {
     const at = atMap[s.type_activite_id] || {};
     const ue = ueMap[s.ue_id] || {};
-    const grp = grpMap[s.group_id] || {};
+    const sGroupIds = s.group_ids || (s.group_id ? [s.group_id] : []);
+    const grpLabel = sGroupIds.map(gid => grpMap[gid]?.libelle).filter(Boolean).join(', ');
     const formInits = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
     const isDragging = dragInfo?.sessionId === s.id;
     const fontInit = Math.round(11 * zoom);
@@ -381,7 +382,7 @@ export default function PlanningGlobal() {
           )}
         </div>
         {s.intitule && <div className="truncate text-slate-700 dark:text-slate-200 font-medium" style={{ fontSize: baseFontSmall + 1 }}>{s.intitule}</div>}
-        <div className="text-slate-500" style={{ fontSize: baseFontSmall }}>{s.heure_debut}-{s.heure_fin}{grp.libelle ? ` · ${grp.libelle}` : ''}</div>
+        <div className="text-slate-500" style={{ fontSize: baseFontSmall }}>{s.heure_debut}-{s.heure_fin}{grpLabel ? ` · ${grpLabel}` : ''}</div>
         <div className="font-bold text-blue-700 dark:text-blue-300" style={{ fontSize: fontInit }}>{formInits}</div>
         {s.commentaire && (
           <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 truncate" style={{ fontSize: baseFontSmall - 1 }}>
@@ -421,7 +422,9 @@ export default function PlanningGlobal() {
     if (!hoveredSession || dragInfo || showDialog || createDrag) return null;
     const s = hoveredSession, at = atMap[s.type_activite_id] || {}, promo = promoMap[s.promotion_id] || {};
     const ue = ueMap[s.ue_id] || {}, dom = domMap[s.domain_id] || domMap[ue.domain_id] || {};
-    const site = siteMap[s.site_id] || {}, grp = grpMap[s.group_id] || {};
+    const site = siteMap[s.site_id] || {};
+    const tGroupIds = s.group_ids || (s.group_id ? [s.group_id] : []);
+    const grpLabel = tGroupIds.map(gid => grpMap[gid]?.libelle).filter(Boolean).join(', ');
     const forms = (s.formateur_ids || []).map(fid => fmMap[fid]).filter(Boolean);
     const dur = ((timeToMin(s.heure_fin || '00:00') - timeToMin(s.heure_debut || '00:00')) / 60).toFixed(1);
     return (
@@ -465,7 +468,7 @@ export default function PlanningGlobal() {
           <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
             <GraduationCap size={12} className="text-slate-400" />
             <span>{promo.nom.replace('Promotion ', '')}</span>
-            {grp.libelle && <span className="text-slate-500">· {grp.libelle}</span>}
+            {grpLabel && <span className="text-slate-500">· {grpLabel}</span>}
           </div>
         )}
         {/* Lieu */}
@@ -835,10 +838,40 @@ export default function PlanningGlobal() {
                 <Select value={editSession.promotion_id||''} onValueChange={v=>setEditSession({...editSession,promotion_id:v})}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>
                   <SelectContent>{promotions.map(p=><SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label className="text-xs">Groupe</Label>
-                <Select value={editSession.group_id||'none'} onValueChange={v=>setEditSession({...editSession,group_id:v==='none'?'':v})}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Optionnel" /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">Aucun</SelectItem>{groups.map(g=><SelectItem key={g.id} value={g.id}>{g.libelle}</SelectItem>)}</SelectContent></Select></div>
+              <div className="col-span-2"><Label className="text-xs">Groupes (multi-sélection)</Label>
+                <div className="flex flex-wrap gap-1.5 mt-1 items-center">
+                  {(() => {
+                    const currentIds = editSession.group_ids || (editSession.group_id ? [editSession.group_id] : []);
+                    const promoGroups = groups.filter(g => !editSession.promotion_id || g.promotion_id === editSession.promotion_id);
+                    const allSelected = promoGroups.length > 0 && currentIds.length === 0;
+                    return (
+                      <>
+                        <button type="button"
+                          className={`px-2 py-0.5 rounded border text-[11px] cursor-pointer font-medium ${allSelected ? 'bg-blue-100 border-blue-400 text-blue-800' : 'bg-white border-slate-200 text-slate-600'}`}
+                          onClick={() => setEditSession({ ...editSession, group_ids: [], group_id: '' })}
+                          data-testid="session-group-all">
+                          Promo entière
+                        </button>
+                        {promoGroups.map(g => {
+                          const checked = currentIds.includes(g.id);
+                          return (
+                            <label key={g.id} className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer
+                              ${checked ? 'bg-slate-200 dark:bg-slate-700 border-slate-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                              <input type="checkbox" className="w-3 h-3" checked={checked}
+                                onChange={(e) => {
+                                  const next = e.target.checked ? [...currentIds, g.id] : currentIds.filter(i => i !== g.id);
+                                  setEditSession({ ...editSession, group_ids: next, group_id: next[0] || '' });
+                                }} />
+                              {g.libelle}
+                            </label>
+                          );
+                        })}
+                        {promoGroups.length === 0 && <span className="text-[11px] text-slate-400">Aucun groupe défini pour cette promotion</span>}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
               <div><Label className="text-xs">UE</Label>
                 <Select value={editSession.ue_id||''} onValueChange={v=>setEditSession({...editSession,ue_id:v})}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>

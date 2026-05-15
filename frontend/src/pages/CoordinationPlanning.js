@@ -189,7 +189,9 @@ export default function CoordinationPlanning() {
       const overlap = !(o.heure_fin <= s.heure_debut || s.heure_fin <= o.heure_debut);
       if (!overlap) return false;
       const sharesFormateur = (s.formateur_ids || []).some(id => (o.formateur_ids || []).includes(id));
-      const sharesGroup = s.promotion_id === o.promotion_id && s.group_id === o.group_id && s.group_id;
+      const sGroups = s.group_ids || (s.group_id ? [s.group_id] : []);
+      const oGroups = o.group_ids || (o.group_id ? [o.group_id] : []);
+      const sharesGroup = s.promotion_id === o.promotion_id && sGroups.length > 0 && oGroups.length > 0 && sGroups.some(g => oGroups.includes(g));
       return sharesFormateur || sharesGroup;
     });
   };
@@ -351,16 +353,35 @@ export default function CoordinationPlanning() {
                 </Select>
               </div>
               <div>
-                <Label>Groupe</Label>
-                <Select value={editSession.group_id || 'none'} onValueChange={v => setEditSession({ ...editSession, group_id: v === 'none' ? '' : v })}>
-                  <SelectTrigger data-testid="session-group"><SelectValue placeholder="Promo entière" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Promo entière</SelectItem>
-                    {groups.filter(g => !editSession.promotion_id || g.promotion_id === editSession.promotion_id).map(g => (
-                      <SelectItem key={g.id} value={g.id}>{g.libelle}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Groupes</Label>
+                {(() => {
+                  const ids = editSession.group_ids || (editSession.group_id ? [editSession.group_id] : []);
+                  const promoGroups = groups.filter(g => !editSession.promotion_id || g.promotion_id === editSession.promotion_id);
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mt-1 items-center" data-testid="session-group">
+                      <button type="button"
+                        className={`px-2 py-1 rounded border text-xs font-medium ${ids.length === 0 ? 'bg-blue-100 border-blue-400 text-blue-800' : 'bg-white border-slate-200 text-slate-600'}`}
+                        onClick={() => setEditSession({ ...editSession, group_ids: [], group_id: '' })}>
+                        Promo entière
+                      </button>
+                      {promoGroups.map(g => {
+                        const checked = ids.includes(g.id);
+                        return (
+                          <label key={g.id} className={`flex items-center gap-1 px-2 py-1 rounded border text-xs cursor-pointer
+                            ${checked ? 'bg-slate-200 dark:bg-slate-700 border-slate-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                            <input type="checkbox" className="w-3 h-3" checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked ? [...ids, g.id] : ids.filter(i => i !== g.id);
+                                setEditSession({ ...editSession, group_ids: next, group_id: next[0] || '' });
+                              }} />
+                            {g.libelle}
+                          </label>
+                        );
+                      })}
+                      {promoGroups.length === 0 && <span className="text-xs text-slate-400">Aucun groupe défini pour cette promotion</span>}
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 <Label>UE</Label>
