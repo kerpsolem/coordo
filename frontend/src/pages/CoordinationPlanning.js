@@ -362,7 +362,7 @@ export default function CoordinationPlanning() {
                   <p className="text-xs text-slate-400 italic mt-1" data-testid="session-group">Sélectionnez d'abord une promotion</p>
                 ) : (() => {
                   const ids = editSession.group_ids || (editSession.group_id ? [editSession.group_id] : []);
-                  const promoGroups = groups.filter(g => g.promotion_id === editSession.promotion_id);
+                  const promoGroups = groups.filter(g => !g.promotion_id || g.promotion_id === editSession.promotion_id);
                   return (
                     <div className="flex flex-wrap gap-1.5 mt-1 items-center" data-testid="session-group">
                       <button type="button"

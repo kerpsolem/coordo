@@ -450,7 +450,7 @@ export function FichesProjets() {
                         formateurs={formateurs}
                         fmMap={fmMap}
                         weekOptions={weekOptions}
-                        groups={groups.filter(g => !fiche.promotion_id || g.promotion_id === fiche.promotion_id)}
+                        groups={groups.filter(g => !g.promotion_id || !fiche.promotion_id || g.promotion_id === fiche.promotion_id)}
                         onUpdate={updateActivite}
                         onRemove={removeActivite}
                       />

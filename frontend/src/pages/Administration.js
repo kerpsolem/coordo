@@ -138,7 +138,7 @@ export default function Administration() {
     <div key={key}>
       <Label>{label}</Label>
       {options ? (
-        <Select value={String(editItem?.[key] || '')} onValueChange={v => setEditItem({ ...editItem, [key]: v })}>
+        <Select value={String(editItem?.[key] ?? '') || '__none__'} onValueChange={v => setEditItem({ ...editItem, [key]: v === '__none__' ? '' : v })}>
           <SelectTrigger><SelectValue placeholder="Choisir" /></SelectTrigger>
           <SelectContent>{options.map(o => <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>)}</SelectContent>
         </Select>
@@ -160,7 +160,10 @@ export default function Administration() {
       ['nom', 'Nom'], ['annee_entree', 'Annee entree', 'number'], ['annee_sortie', 'Annee sortie', 'number'],
       ['annee_scolaire', 'Annee scolaire']
     ],
-    groups: [['libelle', 'Libelle']],
+    groups: [
+      ['libelle', 'Libellé'],
+      ['promotion_id', 'Promotion (vide = générique)', 'select', [{ value: '__none__', label: '— Générique (toutes promos) —' }, ...promotions.map(p => ({ value: p.id, label: p.nom }))]]
+    ],
     sites: [['nom', 'Nom'], ['remarques', 'Remarques']],
     actTypes: [
       ['nom', 'Nom'], ['categorie', 'Categorie'], ['couleur', 'Couleur', 'color'],
@@ -225,7 +228,10 @@ export default function Administration() {
         </TabsContent>
         <TabsContent value="groups">
           <CrudTable title="Groupes" icon={Layers} items={groups} isAdmin={isAdmin}
-            columns={[{ key: 'libelle', label: 'Libelle' }]}
+            columns={[
+              { key: 'libelle', label: 'Libellé' },
+              { key: 'promotion_id', label: 'Promotion', render: i => i.promotion_id ? (promotions.find(p => p.id === i.promotion_id)?.nom || '?') : <span className="text-slate-400 italic text-xs">Générique (toutes promos)</span> }
+            ]}
             onAdd={() => openDialog('groups')} onEdit={i => openDialog('groups', i)} onDelete={id => del('groups', id)} />
         </TabsContent>
         <TabsContent value="sites">

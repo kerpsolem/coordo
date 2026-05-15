@@ -844,7 +844,7 @@ export default function PlanningGlobal() {
                     <span className="text-[11px] text-slate-400 italic">Sélectionnez d'abord une promotion</span>
                   ) : (() => {
                     const currentIds = editSession.group_ids || (editSession.group_id ? [editSession.group_id] : []);
-                    const promoGroups = groups.filter(g => g.promotion_id === editSession.promotion_id);
+                    const promoGroups = groups.filter(g => !g.promotion_id || g.promotion_id === editSession.promotion_id);
                     const allSelected = currentIds.length === 0;
                     return (
                       <>
