@@ -232,9 +232,15 @@ export default function PlanningGlobal() {
         createdId = created?.id;
       }
       // If user linked a fiche-projet activity, attach the session_id to it
-      if (linkedActId && linkedFicheId && createdId) {
-        try { await API.post(`/fiches-projet/${linkedFicheId}/activites/${linkedActId}/link-session`, { session_id: createdId }); }
-        catch (err) { console.error('Link to fiche projet failed:', err); }
+      if (linkedActId && linkedFicheId) {
+        if (createdId) {
+          try { await API.post(`/fiches-projet/${linkedFicheId}/activites/${linkedActId}/link-session`, { session_id: createdId }); }
+          catch (err) { console.error('Link to fiche projet failed:', err); }
+        } else {
+          // Multi-day or journée-entière paths : link to the first created session would require knowing its id.
+          // Inform user that the linking was skipped to avoid silent data inconsistency.
+          alert('Note : la séquence n\'a pas pu être liée automatiquement à cette séance multi-jours / journée entière. Vous pouvez créer une séance simple et la lier ensuite.');
+        }
       }
       setShowDialog(false); loadData();
     } catch (e) { console.error(e); }
