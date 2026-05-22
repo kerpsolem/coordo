@@ -26,13 +26,15 @@ const LANES = 16; // 8 groupes × 2 sous-lettres (a/b) = 16 sous-colonnes
 // Unknown -> []
 function groupToLanes(libelle) {
   if (!libelle) return [];
-  const s = libelle.toLowerCase();
-  const mLetter = s.match(/groupe\s*0*(\d)\s*([ab])/);
+  const s = libelle.toLowerCase().trim();
+  // "Groupe 1a", "Groupe 1 a", "1a", "g1a" → lane 0
+  const mLetter = s.match(/^(?:groupe\s*|g)?0*(\d)\s*([ab])$/);
   if (mLetter) {
     const n = parseInt(mLetter[1], 10);
     if (n >= 1 && n <= 8) return [2 * (n - 1) + (mLetter[2] === 'b' ? 1 : 0)];
   }
-  const mNum = s.match(/groupe\s*0*(\d)(?![\d\w])/);
+  // "Groupe 1", "G1", "1" (alone) → lanes [0, 1]
+  const mNum = s.match(/^(?:groupe\s*|g)?0*(\d)$/);
   if (mNum) {
     const n = parseInt(mNum[1], 10);
     if (n >= 1 && n <= 8) return [2 * (n - 1), 2 * (n - 1) + 1];
