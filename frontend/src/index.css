@@ -21,32 +21,39 @@ code {
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 25% 10%;
+    /* Warm cream background, navy text, coral accent — matching IFSI Planning visual identity */
+    --background: 36 30% 93%;             /* #F4EFE6 cream */
+    --foreground: 220 35% 14%;            /* #161F30 navy text */
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 10%;
+    --card-foreground: 220 35% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 10%;
-    --primary: 215 25% 15%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 210 15% 95%;
-    --secondary-foreground: 215 25% 15%;
-    --muted: 210 15% 95%;
-    --muted-foreground: 215 10% 45%;
-    --accent: 210 15% 93%;
-    --accent-foreground: 215 25% 15%;
+    --popover-foreground: 220 35% 14%;
+    --primary: 13 78% 62%;                /* #E97451 coral — used for CTA */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 36 25% 88%;              /* slightly warmer secondary */
+    --secondary-foreground: 220 35% 14%;
+    --muted: 36 20% 90%;
+    --muted-foreground: 215 12% 42%;      /* #6C757D */
+    --accent: 28 80% 91%;                 /* #FBE9D7 peach for soft highlights */
+    --accent-foreground: 220 35% 14%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 15% 88%;
-    --input: 214 15% 88%;
-    --ring: 215 25% 15%;
-    --chart-1: 235 70% 65%;
-    --chart-2: 160 55% 45%;
+    --border: 36 15% 84%;
+    --input: 36 15% 86%;
+    --ring: 13 78% 62%;
+    --chart-1: 13 78% 62%;
+    --chart-2: 220 35% 30%;
     --chart-3: 35 85% 55%;
-    --chart-4: 350 70% 55%;
-    --chart-5: 195 75% 50%;
+    --chart-4: 195 65% 45%;
+    --chart-5: 350 60% 55%;
     --radius: 0.5rem;
     --sidebar-width: 280px;
+    /* Brand tokens (for direct use) */
+    --brand-navy: 220 60% 14%;            /* #0E1F36 sidebar */
+    --brand-navy-soft: 220 35% 22%;       /* hovered sidebar item */
+    --brand-coral: 13 78% 62%;            /* #E97451 */
+    --brand-coral-soft: 13 100% 92%;      /* #FFE2D8 */
+    --brand-peach: 28 80% 91%;            /* #FBE9D7 */
   }
   .dark {
     --background: 215 25% 6%;

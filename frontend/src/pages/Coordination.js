@@ -341,7 +341,7 @@ export function FichesProjets() {
 
   return (
     <div className="space-y-3" data-testid="fiches-projets-tab">
-      <Card className="p-4 bg-blue-900 dark:bg-blue-950 text-white border-0">
+      <Card className="p-4 bg-[#0E1F36] text-white border-0">
         <h2 className="text-center text-base font-bold tracking-wider uppercase">Déroulement des séquences de l'UE</h2>
       </Card>
       <div className="flex flex-wrap items-end justify-between gap-3 px-1">
@@ -403,16 +403,16 @@ export function FichesProjets() {
         const isCollapsed = collapsed[fiche.id];
         return (
           <Card key={fiche.id} className="overflow-hidden" data-testid={`fiche-${fiche.id}`}>
-            <div className="bg-blue-900 dark:bg-blue-950 text-white px-4 py-2.5 flex items-center justify-between">
+            <div className="bg-[#0E1F36] text-white px-4 py-2.5 flex items-center justify-between">
               <button onClick={() => setCollapsed(c => ({ ...c, [fiche.id]: !c[fiche.id] }))} className="flex items-center gap-2 hover:opacity-80" data-testid={`toggle-fiche-${fiche.id}`}>
                 {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 <span className="font-bold text-sm">{ue?.code_ue || 'UE ?'} — {ue?.intitule || ''}</span>
-                {fiche.semestre && <span className="text-[10px] px-1.5 py-0.5 bg-blue-700 rounded">{fiche.semestre}</span>}
+                {fiche.semestre && <span className="text-[10px] px-1.5 py-0.5 bg-white/10 rounded">{fiche.semestre}</span>}
               </button>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-blue-200">{acts.length} séquence{acts.length !== 1 ? 's' : ''} · {totalH.toFixed(1)}h{planned > 0 && ` · ${planned}/${acts.length} planifiées`}</span>
-                {noWeek > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-amber-950 font-bold">{noWeek} à programmer</span>}
-                {isAdmin && <Button size="sm" variant="ghost" className="h-7 text-xs text-white hover:bg-blue-800" onClick={() => addActivite(fiche.id)} data-testid={`add-line-${fiche.id}`}><Plus size={12} className="mr-1" />Ligne</Button>}
+                <span className="text-xs text-slate-300">{acts.length} séquence{acts.length !== 1 ? 's' : ''} · {totalH.toFixed(1)}h{planned > 0 && ` · ${planned}/${acts.length} planifiées`}</span>
+                {noWeek > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E97451] text-white font-bold">{noWeek} à programmer</span>}
+                {isAdmin && <Button size="sm" variant="ghost" className="h-7 text-xs text-white hover:bg-white/10" onClick={() => addActivite(fiche.id)} data-testid={`add-line-${fiche.id}`}><Plus size={12} className="mr-1" />Ligne</Button>}
               </div>
             </div>
 

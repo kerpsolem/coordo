@@ -136,31 +136,31 @@ export default function Dashboard() {
         </label>
       </div>
 
-      {/* Saint + Citation */}
+      {/* Saint + Citation — peach + soft white style */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data?.saint_du_jour && (
-          <Card><CardContent className="flex items-center gap-4 py-3">
-            <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"><Gift size={20} className="text-amber-600" /></div>
+          <Card className="border-[#F8DBC2] bg-[#FFF1E8] dark:bg-amber-950/20 dark:border-amber-800"><CardContent className="flex items-center gap-4 py-3">
+            <div className="w-10 h-10 rounded-full bg-white dark:bg-amber-900/30 flex items-center justify-center shadow-sm"><Gift size={20} className="text-[#E97451]" /></div>
             <div>
-              <p className="text-xs text-slate-500">Ephemeride</p>
-              <p className="text-base font-semibold" style={{fontFamily:'Outfit'}}>Aujourd'hui on fete les <span className="text-amber-600 dark:text-amber-400">{data.saint_du_jour}</span></p>
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-[#E97451]">Éphéméride</p>
+              <p className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Outfit' }}>Aujourd'hui on fête les <span className="text-[#E97451]">{data.saint_du_jour}</span></p>
             </div>
           </CardContent></Card>
         )}
         {data?.citation && (
           <Card><CardContent className="flex items-center gap-4 py-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center"><Quote size={20} className="text-indigo-600" /></div>
+            <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center"><Quote size={18} className="text-slate-600 dark:text-slate-300" /></div>
             <div>
-              <p className="text-sm italic text-slate-600 dark:text-slate-300">"{data.citation.text}"</p>
-              <p className="text-xs text-slate-500 mt-0.5">-- {data.citation.author}</p>
+              <p className="text-sm italic text-slate-700 dark:text-slate-200">« {data.citation.text} »</p>
+              <p className="text-xs text-slate-500 mt-0.5">— {data.citation.author}</p>
             </div>
           </CardContent></Card>
         )}
       </div>
 
       {data?.anniversaires?.length > 0 && (
-        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
-          <CardContent className="py-2 flex items-center gap-3"><Gift size={16} className="text-amber-500" /><span className="text-sm font-medium">Anniversaire : {data.anniversaires.join(', ')}</span></CardContent>
+        <Card className="border-[#F8DBC2] bg-[#FFF1E8] dark:border-amber-800 dark:bg-amber-950/20">
+          <CardContent className="py-2 flex items-center gap-3"><Gift size={16} className="text-[#E97451]" /><span className="text-sm font-medium">Anniversaire : {data.anniversaires.join(', ')}</span></CardContent>
         </Card>
       )}
 
@@ -168,26 +168,26 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card data-testid="kpi-seances"><CardContent className="py-4">
           <div className="flex items-center justify-between">
-            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Seances planifiees</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{data?.total_seances || 0}</p><p className="text-[10px] text-slate-400">sur la periode</p></div>
-            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"><Calendar size={20} className="text-blue-600" /></div>
+            <div><p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Séances planifiées</p><p className="text-3xl font-bold mt-1 text-[#0E1F36] dark:text-white" style={{ fontFamily: 'Outfit' }}>{data?.total_seances || 0}</p><p className="text-[10px] text-slate-400 mt-0.5">sur la période</p></div>
+            <Calendar size={22} className="text-[#E97451]" />
           </div>
         </CardContent></Card>
         <Card data-testid="kpi-heures"><CardContent className="py-4">
           <div className="flex items-center justify-between">
-            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Heures totales</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{data?.total_heures?.toFixed(0) || 0}h</p><p className="text-[10px] text-slate-400">heures cumulees</p></div>
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center"><Clock size={20} className="text-emerald-600" /></div>
+            <div><p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Heures totales</p><p className="text-3xl font-bold mt-1 text-[#0E1F36] dark:text-white" style={{ fontFamily: 'Outfit' }}>{data?.total_heures?.toFixed(0) || 0}h</p><p className="text-[10px] text-slate-400 mt-0.5">heures cumulées</p></div>
+            <Clock size={22} className="text-[#E97451]" />
           </div>
         </CardContent></Card>
         <Card data-testid="kpi-formateurs"><CardContent className="py-4">
           <div className="flex items-center justify-between">
-            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Formateurs actifs</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{data?.total_formateurs || 0}</p><p className="text-[10px] text-slate-400">intervenants</p></div>
-            <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center"><Users size={20} className="text-violet-600" /></div>
+            <div><p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Formateurs actifs</p><p className="text-3xl font-bold mt-1 text-[#0E1F36] dark:text-white" style={{ fontFamily: 'Outfit' }}>{data?.total_formateurs || 0}</p><p className="text-[10px] text-slate-400 mt-0.5">intervenants</p></div>
+            <Users size={22} className="text-[#E97451]" />
           </div>
         </CardContent></Card>
         <Card data-testid="kpi-promos"><CardContent className="py-4">
           <div className="flex items-center justify-between">
-            <div><p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Promotions</p><p className="text-2xl font-bold mt-1" style={{fontFamily:'Outfit'}}>{promotions.length}</p><p className="text-[10px] text-slate-400">en cours</p></div>
-            <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center"><GraduationCap size={20} className="text-rose-600" /></div>
+            <div><p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Promotions</p><p className="text-3xl font-bold mt-1 text-[#0E1F36] dark:text-white" style={{ fontFamily: 'Outfit' }}>{promotions.length}</p><p className="text-[10px] text-slate-400 mt-0.5">en cours</p></div>
+            <GraduationCap size={22} className="text-[#E97451]" />
           </div>
         </CardContent></Card>
       </div>

@@ -9,7 +9,7 @@ import API from '../lib/api';
 import {
   LayoutDashboard, Calendar, Map, Users, UserCheck, ClipboardList,
   Clock, Settings, AlertTriangle, UserX, StickyNote, LogOut,
-  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key, FolderKanban, Plane
+  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key, FolderKanban, Plane, GraduationCap
 } from 'lucide-react';
 
 const consultationLinks = [
@@ -73,41 +73,45 @@ export default function Layout({ children }) {
       <Link
         to={to}
         data-testid={`nav-${to.replace(/\//g, '-').replace(/^-/, '')}`}
-        className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors
+        className={`relative flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors
           ${active
-            ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white font-semibold'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+            ? 'bg-white/5 text-white font-semibold'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'
           }`}
       >
-        <Icon size={18} />
+        {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-[#E97451]" />}
+        <Icon size={18} className={active ? 'text-[#E97451]' : ''} />
         <span>{label}</span>
       </Link>
     );
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-72' : 'w-0'} transition-all duration-200 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden`}>
-        <div className="p-5 border-b border-slate-200 dark:border-slate-800">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight" style={{fontFamily:'Outfit'}}>
-            IFSI Planning
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Coordination pedagogique</p>
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Sidebar (always navy, regardless of dark mode) */}
+      <aside className={`${sidebarOpen ? 'w-72' : 'w-0'} transition-all duration-200 flex-shrink-0 bg-[#0E1F36] border-r border-[#1B3057] flex flex-col overflow-hidden text-slate-200`}>
+        <div className="p-5 border-b border-white/10 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#1B3057] flex items-center justify-center">
+            <GraduationCap size={20} className="text-[#E97451]" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-white tracking-tight" style={{ fontFamily: 'Outfit' }}>IFSI Planning</h1>
+            <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wider">Coordination pédagogique</p>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {/* Consultation */}
           <button
             onClick={() => setConsultOpen(!consultOpen)}
-            className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold tracking-widest uppercase text-slate-400 dark:text-slate-500"
+            className="flex items-center justify-between w-full px-3 py-2 text-[11px] font-semibold tracking-widest uppercase text-[#E97451]"
             data-testid="nav-section-consultation"
           >
-            <span>Consultation</span>
-            {consultOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+            <span>&gt; Consultation</span>
+            {consultOpen ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
           </button>
           {consultOpen && (
-            <div className="space-y-0.5 ml-1">
+            <div className="space-y-0.5">
               {consultationLinks.map(l => <NavLink key={l.to} {...l} />)}
             </div>
           )}
@@ -115,20 +119,18 @@ export default function Layout({ children }) {
           {/* Coordination - visible for admins and secretariat */}
           {showCoordination && (
             <>
-              <div className="my-3 border-t border-slate-200 dark:border-slate-700" />
+              <div className="my-3 border-t border-white/10" />
               <button
                 onClick={() => setCoordOpen(!coordOpen)}
-                className={`flex items-center justify-between w-full px-3 py-2 text-xs font-semibold tracking-widest uppercase
-                  ${isCoordPage ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className="flex items-center justify-between w-full px-3 py-2 text-[11px] font-semibold tracking-widest uppercase text-[#E97451]"
                 data-testid="nav-section-coordination"
               >
-                <span>Coordination</span>
-                {coordOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                <span>&gt; Coordination</span>
+                {coordOpen ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
               </button>
               {coordOpen && (
-                <div className="space-y-0.5 ml-1">
+                <div className="space-y-0.5">
                   {coordinationLinks.map(l => {
-                    // Secretariat only sees Coordination planning
                     if (isSecretariat && !isAdmin && l.to !== '/coordination-planning') return null;
                     if (l.to === '/administration' && !isSuperAdmin && user?.role !== 'admin_coordination') return null;
                     return <NavLink key={l.to} {...l} />;
@@ -143,27 +145,27 @@ export default function Layout({ children }) {
         </nav>
 
         {/* User info */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800">
+        <div className="p-3 border-t border-white/10">
           <div className="flex items-center gap-2 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">
+            <div className="w-9 h-9 rounded-full bg-[#E97451] flex items-center justify-center text-xs font-bold text-white">
               {(user?.prenom?.[0] || '') + (user?.nom?.[0] || '')}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+              <p className="text-sm font-semibold text-white truncate">
                 {user?.prenom} {user?.nom}
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.role?.replace('_', ' ')}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider truncate">{user?.role?.replace('_', ' ')}</p>
             </div>
           </div>
           <div className="flex gap-1 mt-2">
-            <Button variant="ghost" size="sm" onClick={toggleDark} data-testid="theme-toggle" className="flex-1">
+            <Button variant="ghost" size="sm" onClick={toggleDark} data-testid="theme-toggle" className="flex-1 text-slate-300 hover:bg-white/10 hover:text-white">
               {dark ? <Sun size={16}/> : <Moon size={16}/>}
               <span className="ml-2 text-xs">{dark ? 'Clair' : 'Sombre'}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowPwDialog(true)} data-testid="change-pw-btn" title="Changer le mot de passe">
+            <Button variant="ghost" size="sm" onClick={() => setShowPwDialog(true)} data-testid="change-pw-btn" title="Changer le mot de passe" className="text-slate-300 hover:bg-white/10 hover:text-white">
               <Key size={16}/>
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="logout-btn" className="text-red-500 hover:text-red-600">
+            <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="logout-btn" className="text-red-400 hover:text-red-300 hover:bg-white/10">
               <LogOut size={16}/>
             </Button>
           </div>
