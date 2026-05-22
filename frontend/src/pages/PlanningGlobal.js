@@ -89,6 +89,7 @@ export default function PlanningGlobal() {
   const [sideByView, setSideByView] = useState(false);
   const [selectedPromos, setSelectedPromos] = useState(new Set());
   const [filterSemestre, setFilterSemestre] = useState('all');
+  const [filterUE, setFilterUE] = useState('all');
   const [editSession, setEditSession] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
   const [hoveredSession, setHoveredSession] = useState(null);
@@ -190,39 +191,50 @@ export default function PlanningGlobal() {
   };
   const saveSession = async () => {
     try {
-      if (editSession.id) {
+      // Extract internal "_linked_*" hints for fiche projet linkage (do not send them to backend as-is)
+      const linkedActId = editSession._linked_activite_id || '';
+      const linkedFicheId = editSession._linked_fiche_id || '';
+      const cleanSession = { ...editSession };
+      delete cleanSession._linked_activite_id;
+      delete cleanSession._linked_fiche_id;
+      let createdId = null;
+      if (cleanSession.id) {
         // Editing existing session
-        if (editSession.journee_entiere) {
-          // Split into matin + apres-midi: update existing as matin, create afternoon copy
-          const matin = { ...editSession, heure_debut: '08:30', heure_fin: '12:00', duree: 3.5, journee_entiere: false };
+        if (cleanSession.journee_entiere) {
+          const matin = { ...cleanSession, heure_debut: '08:30', heure_fin: '12:00', duree: 3.5, journee_entiere: false };
           delete matin.date_fin_periode;
-          await API.put(`/sessions/${editSession.id}`, matin);
-          const apres = { ...editSession };
+          await API.put(`/sessions/${cleanSession.id}`, matin);
+          const apres = { ...cleanSession };
           delete apres.id; delete apres.date_fin_periode;
           apres.heure_debut = '13:00'; apres.heure_fin = '16:30'; apres.duree = 3.5; apres.journee_entiere = false;
           await API.post('/sessions', apres);
         } else {
-          await API.put(`/sessions/${editSession.id}`, editSession);
+          await API.put(`/sessions/${cleanSession.id}`, cleanSession);
         }
-      } else if (editSession.date_fin_periode && editSession.date_fin_periode > editSession.date) {
-        // Multi-day creation -> bulk
-        const at = atMap[editSession.type_activite_id] || {};
+        createdId = cleanSession.id;
+      } else if (cleanSession.date_fin_periode && cleanSession.date_fin_periode > cleanSession.date) {
+        const at = atMap[cleanSession.type_activite_id] || {};
         const isStage = (at.nom || '').toLowerCase().includes('stage');
         await API.post('/sessions/bulk', {
-          ...editSession,
-          date_debut: editSession.date,
-          date_fin: editSession.date_fin_periode,
+          ...cleanSession,
+          date_debut: cleanSession.date,
+          date_fin: cleanSession.date_fin_periode,
           mode: isStage ? 'stage' : 'multi_day',
           exclude_holidays: true,
         });
-      } else if (editSession.journee_entiere) {
-        // Single day "Journee entiere" -> create 2 sessions: matin (8h30-12h) + apres-midi (13h-16h30)
-        const base = { ...editSession, journee_entiere: false };
+      } else if (cleanSession.journee_entiere) {
+        const base = { ...cleanSession, journee_entiere: false };
         delete base.date_fin_periode;
         await API.post('/sessions', { ...base, heure_debut: '08:30', heure_fin: '12:00', duree: 3.5 });
         await API.post('/sessions', { ...base, heure_debut: '13:00', heure_fin: '16:30', duree: 3.5 });
       } else {
-        await API.post('/sessions', editSession);
+        const { data: created } = await API.post('/sessions', cleanSession);
+        createdId = created?.id;
+      }
+      // If user linked a fiche-projet activity, attach the session_id to it
+      if (linkedActId && linkedFicheId && createdId) {
+        try { await API.post(`/fiches-projet/${linkedFicheId}/activites/${linkedActId}/link-session`, { session_id: createdId }); }
+        catch (err) { console.error('Link to fiche projet failed:', err); }
       }
       setShowDialog(false); loadData();
     } catch (e) { console.error(e); }
@@ -553,7 +565,8 @@ export default function PlanningGlobal() {
   const PromoGrid = ({ promoId, promoName }) => {
     const promoSessions = (promoId === 'all' ? sessions : sessions.filter(s => s.promotion_id === promoId))
       .filter(s => filterFormateur === 'all' ? true : (s.formateur_ids || []).includes(filterFormateur))
-      .filter(s => filterType === 'all' ? true : s.type_activite_id === filterType);
+      .filter(s => filterType === 'all' ? true : s.type_activite_id === filterType)
+      .filter(s => filterUE === 'all' ? true : s.ue_id === filterUE);
     return (
       <Card className="overflow-hidden">
         {promoName && <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b font-semibold" style={{ fontSize: 13 * zoom }}>{promoName}</div>}
@@ -826,13 +839,13 @@ export default function PlanningGlobal() {
             data-testid={`filter-promo-${p.id}`}>{p.nom.replace('Promotion ', '')}</Button>
         ))}
         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
-        <Select value={filterSemestre} onValueChange={setFilterSemestre}>
-          <SelectTrigger className="w-36 h-8 text-xs" data-testid="filter-semestre"><SelectValue placeholder="Semestre" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous semestres</SelectItem>
-            <SelectItem value="pair">Pairs (S2,S4,S6)</SelectItem>
-            <SelectItem value="impair">Impairs (S1,S3,S5)</SelectItem>
-            {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+        <Select value={filterUE} onValueChange={setFilterUE}>
+          <SelectTrigger className="w-44 h-8 text-xs" data-testid="filter-ue"><SelectValue placeholder="UE" /></SelectTrigger>
+          <SelectContent className="max-h-72">
+            <SelectItem value="all">Toutes les UE</SelectItem>
+            {ues.slice().sort((a, b) => (a.code_ue || '').localeCompare(b.code_ue || '')).map(u => (
+              <SelectItem key={u.id} value={u.id}>{u.code_ue} — {u.intitule}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={filterFormateur} onValueChange={setFilterFormateur}>
@@ -1063,8 +1076,60 @@ export default function PlanningGlobal() {
               </div>
               <div><Label className="text-xs">UE</Label>
                 <Select value={editSession.ue_id||''} onValueChange={v=>setEditSession({...editSession,ue_id:v})}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>
-                  <SelectContent>{ues.map(u=><SelectItem key={u.id} value={u.id}>{u.code_ue} - {u.intitule}</SelectItem>)}</SelectContent></Select></div>
+                  <SelectTrigger className="h-8 text-sm" data-testid="session-ue"><SelectValue placeholder="Choisir" /></SelectTrigger>
+                  <SelectContent>{ues.map(u=><SelectItem key={u.id} value={u.id}>{u.code_ue} - {u.intitule}</SelectItem>)}</SelectContent></Select>
+                {/* Liste des séquences "à programmer" de la fiche projet pour cette UE+promo */}
+                {editSession.ue_id && (() => {
+                  const candidates = (aProgrammer || []).filter(a =>
+                    a.ue_id === editSession.ue_id &&
+                    (!editSession.promotion_id || !a.promotion_id || a.promotion_id === editSession.promotion_id)
+                  );
+                  if (candidates.length === 0) return null;
+                  return (
+                    <div className="mt-2 p-2 rounded border border-[#F8DBC2] bg-[#FFF1E8] dark:bg-amber-950/20">
+                      <p className="text-[10px] font-semibold text-[#E97451] uppercase tracking-wider mb-1">Séquence à programmer (option)</p>
+                      <Select value={editSession._linked_activite_id || ''} onValueChange={(v) => {
+                        if (!v || v === '__none__') {
+                          setEditSession({ ...editSession, _linked_activite_id: '' });
+                          return;
+                        }
+                        const act = candidates.find(a => a.activite_id === v);
+                        if (!act) return;
+                        // Pre-fill : intitule, type, heures (durée), formateurs, groupes
+                        const dur = parseFloat(act.heures) || (editSession.duree || 2);
+                        const hd = editSession.heure_debut || '08:00';
+                        const [hh, mm] = hd.split(':').map(Number);
+                        const endMin = hh * 60 + mm + dur * 60;
+                        const heFin = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+                        setEditSession({
+                          ...editSession,
+                          _linked_activite_id: v,
+                          _linked_fiche_id: act.fiche_id,
+                          intitule: act.nom || editSession.intitule || '',
+                          type_activite_id: act.type_activite_id || editSession.type_activite_id || '',
+                          duree: dur,
+                          heure_fin: heFin,
+                          formateur_ids: (act.formateur_ids && act.formateur_ids.length) ? act.formateur_ids : editSession.formateur_ids,
+                          group_ids: (act.group_ids && act.group_ids.length) ? act.group_ids : editSession.group_ids,
+                        });
+                      }}>
+                        <SelectTrigger className="h-8 text-xs bg-white" data-testid="session-link-activite"><SelectValue placeholder={`${candidates.length} séquence(s) disponible(s)`} /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Aucune (création libre)</SelectItem>
+                          {candidates.map(a => {
+                            const at = atMap[a.type_activite_id];
+                            return (
+                              <SelectItem key={a.activite_id} value={a.activite_id}>
+                                {at?.nom || '?'} · {a.nom || '(sans intitulé)'} · {a.heures}h{a.semaine_souhaitee ? ` · ${a.semaine_souhaitee}` : ''}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
+              </div>
               <div><Label className="text-xs">Semestre</Label>
                 <Select value={editSession.semestre||''} onValueChange={v=>setEditSession({...editSession,semestre:v})}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>

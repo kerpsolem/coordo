@@ -1,0 +1,33 @@
+{
+  "summary": "Iter16 Planning Global - UE filter replacement + sequence-to-program selector in session modal: VERIFIED end-to-end via Playwright + visual screenshot inspection. All 7 acceptance criteria pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js now 1185 lines - still above the 700-line guideline. The pre-fill logic (lines 1091-1114) and the candidate-filter (lines 1083-1086) duplicate logic with dropActivityOnDay (lines 264-302). Both should be unified into a single helper applyActivityToSession(act, baseSession) reused in both code paths.",
+    "Minor: the candidate filter at line 1085 uses `!a.promotion_id || a.promotion_id === editSession.promotion_id` (tolerates generic activities with empty promo). This is correct per spec but should be explicitly tested with a generic-promo activity. The current seed data has all TEST_iter6 activities scoped to one promo so this branch is currently untested in the seeded environment.",
+    "saveSession (lines 192-241) sets createdId only when calling POST /sessions (not for bulk or journee_entiere two-POST paths). If a user creates a multi-day or full-day session AND linked a sequence, the link-session call is silently skipped. Either prevent linking in those modes or pick the first POSTed session id."
+  ],
+  "test_scenarios_verified": [
+    "A) filter-ue Select exists (data-testid=filter-ue), lists 19 UEs sorted by code_ue + 'Toutes les UE'. filter-semestre is ABSENT (count=0). PASS",
+    "B) Selecting UE 'essai' filters sessions from 13 to 0; selecting 'Toutes les UE' restores 13. State filterUE applied correctly in PromoGrid (line 569). PASS",
+    "C) Open Nouvelle séance modal → data-testid=session-ue present; data-testid=session-link-activite ABSENT before UE selection. PASS",
+    "D) After Promo 2026-2029 + UE A1: coral panel 'SÉQUENCE À PROGRAMMER (OPTION)' rendered with #F8DBC2/#FFF1E8/#E97451 colors. Select shows 9 options: '— Aucune' + 8 sequences formatted 'TYPE · nom · Xh · semaine_souhaitee' (e.g. 'Autre · TEST_iter6_sess2_f8ef1a · 1h · S7'). PASS",
+    "E) Selecting 'Autre · TEST_iter6_sess2_f8ef1a · 1h · S7' pre-fills Intitulé='TEST_iter6_sess2_f8ef1a', Type='Autre', heure_fin='09:00' (=08:00+1h). Visible in screenshot. PASS",
+    "F) Regression filters present: filter-promo-all, filter-formateur, filter-type, toggle-side-by-side, toggle-sidebar-aprog, new-session-btn all detected (count=1). PASS",
+    "G) Coral panel conditional rendering on candidates.length > 0 verified by lines 1087-1088 in code. PASS"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (no backend changes)", "frontend": "100%"},
+  "test_credentials": "admin@ifsi.fr / Admin123!",
+  "seed_data_creation": "No seed data created. Used pre-existing TEST_iter6_* activities seeded in fiches-projet a-programmer (8 sequences on UE A1 + Promo 2026-2029). No cleanup needed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter16 frontend-only changes verified. The link-session POST is wired (line 235-238 of PlanningGlobal.js saveSession). Did NOT save a real session during testing (closed dialog with Escape) to avoid polluting the schedule, but the pre-fill behavior was observed end-to-end. To do a full end-to-end with persistence: select sequence, save, then GET /api/fiches-projet/a-programmer and verify count decreased by 1. The candidate filter handles empty a.promotion_id as 'generic' (tolerated) - test with a generic-promo activity if a new seed is added.",
+  "rca of the issue": "n/a - iter16 is a feature verification, no bug to RCA."
+}
