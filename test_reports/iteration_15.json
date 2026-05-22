@@ -1,0 +1,31 @@
+{
+  "summary": "Iter15 'expand-to-fill' Planning Global verified end-to-end. Created 14 test sessions on Monday 2026-06-15 (empty week S25) covering 4 distinct scenarios, then inspected style.left/width of each .absolute session block. ALL 4 iter15 assertions PASS exactly as specified in the PRD, plus regression on seeded S21 data confirmed (no horizontal overflow, ratios preserved). Test sessions cleaned up after verification.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js is now 1118 lines and the placement IIFE (lines 628-774) is ~150 lines of complex algorithm logic - should be extracted to a separate hook (e.g. usePlacementLayout) and unit-tested in isolation.",
+    "Minor: in groupToLanes (line 27-44) the regex `groupe\\s*0*(\\d)\\s*([ab])` requires a literal 'groupe' prefix, but the seeded database contains subgroup libelles like '5a', '5b', '6a', '7a', '7b' (no 'Groupe ' prefix). These fall through to empty lanes and return widthPct=100 (then get scaled down by maxSum). The end-result still fills correctly thanks to iter15 + scale-down, but the regex won't honor lane order for such libelles. If lane-order is important for short-format names, the regex should be made prefix-optional: /^(?:groupe\\s*)?0*(\\d)\\s*([ab])$/."
+  ],
+  "test_scenarios_verified": [
+    "A) 6 sessions Groupe 1-6 same slot 09:00-10:00 → each at 16.67% width, left=[0, 16.67, 33.33, 50, 66.67, 83.33], rightmost=100%, lane order preserved (G1→0, G6→83.33). Expand x1.333 from 75% → 100%. PASS",
+    "B) 1/2 promo + Groupe 3 same slot 10:30-11:30 → 1/2 promo left=0 width=80%, Groupe 3 left=80 width=20%. Ratio 4:1 preserved (orig 50:12.5 = 4:1). Expand x1.6 from 62.5% → 100%. PASS",
+    "C) Single Groupe 1 alone at 12:00-13:00 → left=0 width=100%. PASS",
+    "D) 1/2 promo + G1+G2+G3+G4 exact 100% at 14:00-15:00 → demi left=0 w=50, G1 left=50 w=12.5, G2 left=62.5 w=12.5, G3 left=75 w=12.5, G4 left=87.5 w=12.5, rightmost=100%. NO expand applied (condition used<99.5 is false). Layout identical to iter13/14 baseline. PASS",
+    "Regression S21 (seeded): 13 session blocks, max(left+width)=100% exactly, 0 overflow violations. Clusters with mixed time-ranges respect minRight=100% so expand correctly stays off. PASS",
+    "overflow:hidden present on 15/15 day cells containing sessions (3 of 18 .border-r.relative containers without it are header/empty wrappers). PASS"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "admin@ifsi.fr / Admin123!",
+  "seed_data_creation": "Created 14 test sessions (intitule prefix TEST_ITER15_*) on date 2026-06-15 across 4 timeslots to exercise iter15 expand-to-fill scenarios. All 14 deleted via DELETE /api/sessions/{id} after verification. Final remaining sessions on week S25: 0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter15 expand-to-fill works correctly. The algorithm (PlanningGlobal.js lines 738-760) reads minLeft/maxRight per cluster after greedy placement and applies a uniform multiplicative expand factor (100/used) when used is in ]0.5, 99.5[. This preserves all internal ratios. For future testing of similar layout features: use empty week 2026-06-15 (S25) which has no seeded data, and create sessions via POST /api/sessions with promotion_id=28c7a55b-2578-4f52-b7ac-8395c5102331 and type_activite_id=37756ad8-8de2-4c9c-83b5-1c289e34c5c6. Inspect via page.evaluate() reading style.left and style.width on div.absolute children of div.border-r.relative day cells.",
+  "rca of the issue": "n/a - iter15 is a feature addition verification, no bug to RCA."
+}

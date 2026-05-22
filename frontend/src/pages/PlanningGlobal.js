@@ -735,6 +735,29 @@ export default function PlanningGlobal() {
                         const width = Math.min(scaledWidth, target.left + target.width - actualLeft);
                         placements.set(A.s.id, { left: Math.max(0, actualLeft), width: Math.max(0.8, width) });
                       }
+                      // ---- iter15 : "expand to fill" — étire les blocs du cluster proportionnellement
+                      // quand l'espace utilisé est < 100% (préserve les ratios entre eux). Cas user :
+                      // 6 sessions sur 5a..7b s'étalent sur 37.5% → expand x2.67 → chacune ~16.67%, fill 100%.
+                      // Ratios préservés : 1/2 promo + G3 (50+12.5=62.5%) → expand x1.6 → 80% + 20% (ratio 4:1).
+                      {
+                        let minLeft = 100, maxRight = 0;
+                        for (const m of members) {
+                          const p = placements.get(m.it.s.id);
+                          if (!p) continue;
+                          minLeft = Math.min(minLeft, p.left);
+                          maxRight = Math.max(maxRight, p.left + p.width);
+                        }
+                        const used = maxRight - minLeft;
+                        if (used > 0.5 && used < 99.5) {
+                          const expand = 100 / used;
+                          for (const m of members) {
+                            const p = placements.get(m.it.s.id);
+                            if (!p) continue;
+                            p.left = (p.left - minLeft) * expand;
+                            p.width = p.width * expand;
+                          }
+                        }
+                      }
                     }
                     return daySessions.map(s => {
                       const isDragging = dragInfo?.sessionId === s.id;
