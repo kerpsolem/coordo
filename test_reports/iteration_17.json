@@ -1,0 +1,42 @@
+{
+  "summary": "Iter17 Planning Global - Per-group student hours badges (G1..G8) VERIFIED end-to-end via Playwright. All 5 acceptance scenarios pass: promo entière, group-specific, TD-dedup, 1/2 promo, and TA badge. Promo name + 8 badges render correctly. Gray vs coral styling correct. Native tooltip title verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js is now 1255 lines - still well above the 700-line guideline. computeStudentHours (lines 571-615), groupToLanes (line 27), and isTAType (inline) should ideally be extracted to /app/frontend/src/lib/planning-utils.js for unit-testability and DRY.",
+    "computeStudentHours iterates 8 groups × N sessions, recomputing groupToLanes per session via inline groups.find. For large session counts this can be slow. Pre-compute a Map<groupId, lanes> once outside the loop.",
+    "isTAType matching on description containing 'appropriation' is permissive (e.g. 'inappropriate' would NOT match because of word boundary chance, but 'reappropriation' WOULD match). Safer: also strict match on activity nom in a configurable set ('TA','Temps d appropriation','Temps d\\'appropriation').",
+    "The duree fallback at line 608 uses parseFloat(s.duree) || ((heure_fin - heure_debut)/60). If duree is explicitly 0 or null and times are missing, it returns 0 - acceptable but worth a comment.",
+    "Dedup key includes type_activite_id - so two sessions with same intitule/date/heure_debut but different types (CM vs TD) are NOT deduplicated. Per spec 'TD à intitulé identique dédupliqué', this is correct since dedup should only apply when the activity is truly the same parallel TD. Keep as is."
+  ],
+  "test_scenarios_verified": [
+    "A) Promo entière (group_ids=[]) duree=3h on week S32/2026 (2026-08-03): All 8 badges G1..G8 = 3h, all coral (#FFF1E8 background). PASS",
+    "B) Group-specific (group_ids=[Groupe 5]) duree=2h on week S33/2026 (2026-08-10): G5=2h coral, G1-4 and G6-8 = 0h gray. PASS",
+    "C) Dedup TD (4 sessions same intitule 'Pansement' / date / 08:00 / type CM, group_ids = G1/G2/G3/G4) duree=2h each on 2026-08-17: G1=G2=G3=G4=2h (NOT 8h - dedup correct), G5-G8=0h. PASS",
+    "D) Half promo (group_ids=[1/2 promo] = lanes 0..7 = groups 1-4) duree=4h on 2026-08-24: G1=G2=G3=G4=4h, G5-G8=0h. PASS",
+    "E) TA (type 'TA', group_ids=[]) duree=2h on 2026-08-31: All G1..G8 show '2h · TA 2h' with native title 'Groupe X : 2.0h dont TA: 2.0h'. PASS",
+    "Native tooltip title attribute present on every badge; omits 'dont TA: ' when ta=0 (e.g. 'Groupe 5 : 2.0h' in B). PASS",
+    "Promo name 'Promo 2026-2029' rendered next to badges even with only 1 promo visible (suppressed `displayPromos.length > 1` conditional). PASS",
+    "Color styling: total>0 -> bg-[#FFF1E8] text-[#E97451] border-[#F8DBC2] (coral), total=0 -> bg-slate-100 text-slate-400 (gray). Verified via computed className inspection. PASS"
+  ],
+  "regression_checks": [
+    "filter-promo-{id} button still works (filtered to Promo 2026-2029 successfully).",
+    "date-picker (data-testid=date-picker) jumps to arbitrary week correctly.",
+    "Session block rendered for TA session on 2026-08-31 in grid (08:00-10:00) visible in screenshot.",
+    "Sidebar 'a-programmer' and side-by-side toggle still present (not exercised but selectors unchanged)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (no backend changes)", "frontend": "100% (5/5 scenarios + tooltip + styling)"},
+  "test_credentials": "admin@ifsi.fr / Admin123!",
+  "seed_data_creation": "Created 8 test sessions on Promo 2026-2029 across 5 distinct weeks (2026-08-03/10/17/24/31). Also created missing 'Groupe 8' group (id=b30ebda4-27bc-46cb-a972-cefb57a0554b) and 'TA' activity type (id=42ae089a-c832-4802-b835-b4a877226136) needed for tests. All 8 test sessions deleted via DELETE /api/sessions/{id} after testing. Groupe 8 and TA type were kept since they were already required by the feature spec and were missing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter17 feature is solid. computeStudentHours helper at lines 571-615 of PlanningGlobal.js is the source of truth. Test infrastructure created in DB: group 'Groupe 8' and activity type 'TA' (description 'Temps d appropriation'). If you need to recreate the scenarios, use POST /api/sessions on Promo 2026-2029 with the 5 distinct Mondays in Aug 2026. Date-picker (data-testid=date-picker) accepts ISO yyyy-MM-dd via page.fill() to jump weeks. Badge container selector: [data-testid='student-hours-{promoId}'] and each badge is a span with title attribute containing 'Groupe X : Yh' optionally followed by ' dont TA: Zh'.",
+  "rca of the issue": "n/a - feature verification, no bugs found."
+}

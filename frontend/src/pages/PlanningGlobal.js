@@ -568,14 +568,78 @@ export default function PlanningGlobal() {
     );
   };
 
+  // Compute weekly hours per group (student POV) for a promotion
+  const computeStudentHours = (promoId) => {
+    if (!promoId || promoId === 'all') return null;
+    const weekDates = new Set(allWeekDays.map(d => format(d, 'yyyy-MM-dd')));
+    const weekSessions = sessions.filter(s => s.promotion_id === promoId && weekDates.has(s.date));
+    if (weekSessions.length === 0) return null;
+    // Identify TA (temps d'appropriation) activity type
+    const isTAType = (typeId) => {
+      const at = atMap[typeId];
+      if (!at) return false;
+      const n = (at.nom || '').toLowerCase().trim();
+      return n === 'ta' || (at.description || '').toLowerCase().includes('appropriation');
+    };
+    // For each group 1..8, compute total hours from a student's POV
+    const result = [];
+    for (let g = 1; g <= 8; g++) {
+      const laneA = 2 * (g - 1), laneB = 2 * (g - 1) + 1;
+      // Filter sessions that concern this student (promo entière OR group_ids covers laneA or laneB)
+      const studentSessions = weekSessions.filter(s => {
+        const gids = s.group_ids || (s.group_id ? [s.group_id] : []);
+        if (gids.length === 0) return true; // Promo entière
+        // Get lanes covered by this session
+        const lanes = new Set();
+        for (const gid of gids) {
+          const grp = groups.find(x => x.id === gid);
+          if (grp) groupToLanes(grp.libelle).forEach(l => lanes.add(l));
+        }
+        return lanes.has(laneA) || lanes.has(laneB);
+      });
+      // Deduplicate "TD with identical intitule + date + heure_debut" : student attends only ONE parallel group
+      // Key sessions by (date, heure_debut, intitule.toLowerCase().trim(), type_activite_id)
+      const seenKeys = new Set();
+      let total = 0, totalTA = 0;
+      for (const s of studentSessions) {
+        const key = `${s.date}|${s.heure_debut}|${(s.intitule || '').toLowerCase().trim()}|${s.type_activite_id || ''}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        const dur = parseFloat(s.duree) || ((timeToMin(s.heure_fin || '00:00') - timeToMin(s.heure_debut || '00:00')) / 60);
+        total += dur;
+        if (isTAType(s.type_activite_id)) totalTA += dur;
+      }
+      result.push({ groupe: g, total, ta: totalTA });
+    }
+    return result;
+  };
+
   const PromoGrid = ({ promoId, promoName }) => {
     const promoSessions = (promoId === 'all' ? sessions : sessions.filter(s => s.promotion_id === promoId))
       .filter(s => filterFormateur === 'all' ? true : (s.formateur_ids || []).includes(filterFormateur))
       .filter(s => filterType === 'all' ? true : s.type_activite_id === filterType)
       .filter(s => filterUE === 'all' ? true : s.ue_id === filterUE);
+    const studentHours = computeStudentHours(promoId);
     return (
       <Card className="overflow-hidden">
-        {promoName && <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b font-semibold" style={{ fontSize: 13 * zoom }}>{promoName}</div>}
+        {promoName && (
+          <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b" style={{ fontSize: 13 * zoom }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold">{promoName}</span>
+              {studentHours && (
+                <div className="flex flex-wrap gap-1" data-testid={`student-hours-${promoId}`}>
+                  {studentHours.map(h => (
+                    <span key={h.groupe} className={`text-[10px] px-1.5 py-0.5 rounded ${h.total > 0 ? 'bg-[#FFF1E8] text-[#E97451] border border-[#F8DBC2]' : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400'}`}
+                      title={`Groupe ${h.groupe} : ${h.total.toFixed(1)}h${h.ta > 0 ? ` dont TA: ${h.ta.toFixed(1)}h` : ''}`}>
+                      <span className="font-semibold">G{h.groupe}</span> {h.total.toFixed(h.total % 1 === 0 ? 0 : 1)}h
+                      {h.ta > 0 && <span className="opacity-80"> · TA {h.ta.toFixed(h.ta % 1 === 0 ? 0 : 1)}h</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <div className="grid" style={{ gridTemplateColumns: `${Math.round(50 * zoom)}px repeat(${nbDays}, 1fr)`, minWidth: Math.round((100 + nbDays * 130) * zoom) }}>
             <div className="border-b border-r border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/30" />
@@ -990,7 +1054,7 @@ export default function PlanningGlobal() {
             </div>
           ) : (
             <div className="space-y-3">
-              {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={displayPromos.length > 1 ? p.nom : undefined} />)}
+              {displayPromos.map(p => <PromoGrid key={p.id} promoId={p.id} promoName={p.nom} />)}
             </div>
           )}
         </div>
