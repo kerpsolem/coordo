@@ -625,18 +625,78 @@ export default function PlanningGlobal() {
                       <span className="font-bold text-blue-600" style={{ fontSize: baseFontBlock }}>{createPreview.startTime} - {createPreview.endTime}</span>
                     </div>
                   )}
-                  {daySessions.map((s) => {
-                    const isDragging = dragInfo?.sessionId === s.id;
-                    const sTop = isDragging && dragPreview ? dragPreview.top : Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
-                    const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18 * zoom, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
-                    const layout = computeLaneLayout(s.group_ids || (s.group_id ? [s.group_id] : []), groups);
-                    return (
-                      <div key={s.id} className={`absolute px-0.5 ${isDragging ? 'z-50' : 'z-[15]'}`}
-                        style={{ top: sTop, height: sHeight, width: `${layout.width}%`, left: `${layout.left}%` }}>
-                        {renderBlock(s)}
-                      </div>
-                    );
-                  })}
+                  {(() => {
+                    // Compute base lane layout for each session, then resolve overlaps by subdividing
+                    const sessLayouts = daySessions.map(s => ({ s, layout: computeLaneLayout(s.group_ids || (s.group_id ? [s.group_id] : []), groups) }));
+                    // Find conflict clusters (same time-range overlap AND lane-range overlap)
+                    const n = sessLayouts.length;
+                    const cluster = new Array(n).fill(-1);
+                    let cn = 0;
+                    for (let i = 0; i < n; i++) {
+                      if (cluster[i] !== -1) continue;
+                      cluster[i] = cn;
+                      const stack = [i];
+                      while (stack.length) {
+                        const cur = stack.pop();
+                        const A = sessLayouts[cur];
+                        const aL = A.layout.left, aR = A.layout.left + A.layout.width;
+                        const aSt = timeToMin(A.s.heure_debut), aEn = timeToMin(A.s.heure_fin);
+                        for (let j = 0; j < n; j++) {
+                          if (cluster[j] !== -1) continue;
+                          const B = sessLayouts[j];
+                          const bL = B.layout.left, bR = B.layout.left + B.layout.width;
+                          const bSt = timeToMin(B.s.heure_debut), bEn = timeToMin(B.s.heure_fin);
+                          const timeOverlap = bSt < aEn && bEn > aSt;
+                          const laneOverlap = bL < aR && bR > aL;
+                          if (timeOverlap && laneOverlap) { cluster[j] = cn; stack.push(j); }
+                        }
+                      }
+                      cn++;
+                    }
+                    // For each session, find its column index within its cluster (interval-graph coloring)
+                    const colByIdx = new Array(n).fill(0);
+                    const colsByCluster = new Array(cn).fill(0).map(() => []); // each cluster -> list of {start,end,layoutL,layoutR}[] per column
+                    const orderedIdx = Array.from({ length: n }, (_, i) => i).sort((a, b) => {
+                      const A = sessLayouts[a], B = sessLayouts[b];
+                      if (cluster[a] !== cluster[b]) return cluster[a] - cluster[b];
+                      const aSt = timeToMin(A.s.heure_debut), bSt = timeToMin(B.s.heure_debut);
+                      if (aSt !== bSt) return aSt - bSt;
+                      return A.layout.left - B.layout.left;
+                    });
+                    for (const i of orderedIdx) {
+                      const A = sessLayouts[i];
+                      const cols = colsByCluster[cluster[i]];
+                      const aL = A.layout.left, aR = A.layout.left + A.layout.width;
+                      const aSt = timeToMin(A.s.heure_debut), aEn = timeToMin(A.s.heure_fin);
+                      let chosen = -1;
+                      for (let c = 0; c < cols.length; c++) {
+                        const cl = cols[c];
+                        // can place if no conflict with any in this column
+                        const conflict = cl.some(x => (x.st < aEn && x.en > aSt) && (x.l < aR && x.r > aL));
+                        if (!conflict) { chosen = c; break; }
+                      }
+                      if (chosen === -1) { chosen = cols.length; cols.push([]); }
+                      cols[chosen].push({ st: aSt, en: aEn, l: aL, r: aR });
+                      colByIdx[i] = chosen;
+                    }
+                    const totalColsByCluster = colsByCluster.map(c => Math.max(1, c.length));
+                    return sessLayouts.map(({ s, layout }, i) => {
+                      const isDragging = dragInfo?.sessionId === s.id;
+                      const sTop = isDragging && dragPreview ? dragPreview.top : Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
+                      const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18 * zoom, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
+                      const totalCols = totalColsByCluster[cluster[i]];
+                      const col = colByIdx[i];
+                      // Subdivide the lane width if there's a conflict cluster
+                      const subWidth = layout.width / totalCols;
+                      const subLeft = layout.left + col * subWidth;
+                      return (
+                        <div key={s.id} className={`absolute px-0.5 ${isDragging ? 'z-50' : 'z-[15]'}`}
+                          style={{ top: sTop, height: sHeight, width: `${subWidth}%`, left: `${subLeft}%` }}>
+                          {renderBlock(s)}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               );
             })}

@@ -1,0 +1,36 @@
+{
+  "summary": "Iter11 anti-overlap algorithm fully validated. Created 18 TEST sessions across Mon-Fri of next week (2026-05-25..29) covering all 5 spec cases + regression. Inspected inline style.left and style.width of the .absolute parent of each [data-testid=session-block-*]. All 5 cases pass primary requirement (no visual chevauchement). Cluster detection (BFS on time+lane overlap) and interval-graph coloring (column assignment per cluster) work as designed. Regression (iter10 contiguous/non-contig layouts) intact: each session in a non-conflict situation still gets totalCols=1.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Planning Global - Case 5 (overlapping lane ranges with different bases)",
+        "issues": [
+          "When two sessions occupy partially overlapping lane sets (e.g. G1+G2 = lanes 0..3 and G2+G3 = lanes 2..5), the cluster subdivision uses each session's OWN layout.left/width rather than the UNION of lanes. Result: C5-A lands at left=0%/width=12.5% and C5-B at left=25%/width=12.5%, leaving a visual gap from 12.5% to 25% (the shared lanes 2..3 area). The primary spec requirement (no overlap) is satisfied, but the testing-request wording 'subdivision côte à côte sur l'union des lanes' is not strictly met — strict côte-à-côte on union would yield 0%/18.75% and 18.75%/18.75% covering lanes 0..5 contiguously. Visually correct (no overlap, lanes still meaningful) but with a gap. Decide if this matches the product intent."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: clarify Case 5 expectation — current impl keeps each session anchored on its own lane window; if 'union' subdivision is desired, the cluster step would need to compute the union [minL..maxR] and reassign subWidth = unionWidth/totalCols and subLeft = unionLeft + col*subWidth. Current behavior is mathematically sound (no overlap) but produces a visual gap when two non-identical lane ranges share lanes."
+  ],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js ~628-699: cluster BFS is O(n^2) per day which is fine here (n typically <20). OK.",
+    "Cluster ordering: orderedIdx sorts by cluster then start-time then left — correct for greedy coloring.",
+    "Conflict re-check inside cols.some uses (st<aEn && en>aSt) AND (l<aR && r>aL) — symmetric & correct.",
+    "Edge: when two sessions have IDENTICAL layout but DIFFERENT times that don't overlap (e.g. 08:00-09:00 and 09:00-10:00 both on Groupe 1), they go in the SAME column → totalCols stays 1 → full width each. Correct (iter4-style stacking by time).",
+    "Edge confirmed Case 4: 10:30-10:30 boundary (bSt<aEn is 10:30<10:30 = false) → C4-C correctly placed in its own cluster with full Groupe 1 width.",
+    "Iter10 critique still valid: groupToLanes regex /groupe\\s*0*(\\d)\\s*([ab])/ caps at single digit — only 1..8 supported by design."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% on primary requirement (no overlap, totalCols correct); Case 5 has a minor 'union' interpretation gap noted"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (verified working)",
+  "seed_data_creation": "Created 5 subgroups (Groupe 1a/1b/2a/2b/3a) and 18 TEST_ITER11 sessions on 2026-05-25..29. ALL cleaned up at end of run: 18 sessions DELETEd + 5 groups DELETEd. Database left in original state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter11 layout/anti-overlap verified by inspecting inline style of session-block PARENT (.absolute wrapper). Measured left%/width% values matched expectations exactly. Cases summary: C1 5×6.25% lanes 0..4 ; C2 3×33.33% at 0/33/66 ; C3 5×2.5% at 0/2.5/5/7.5/10 inside Groupe 1's 12.5% ; C4 two clusters: {6.25%@0, 6.25%@6.25} for overlapping pair + {12.5%@0} for non-overlapping 3rd ; C5 partial lane-overlap → 12.5%@0 and 12.5%@25 (gap 12.5-25). To reproduce: POST /api/sessions with promotion_id + group_ids + date/heure_debut/heure_fin, then navigate /planning-global, set date-picker to that Monday, click filter-promo-{pid}, then page.evaluate the parent of each [data-testid=session-block-{id}].",
+  "rca of the issue": "N/A — no functional bug. Algorithm works correctly. Only a spec-interpretation question remains for Case 5 (per-session-layout vs union-of-lanes subdivision)."
+}
