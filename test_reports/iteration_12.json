@@ -1,0 +1,26 @@
+{
+  "summary": "Iter12 anti-overlap algorithm fully validated. The fix from iter11 (where Groupe 1 ⊂ 1/2 promo was incorrectly clusterized and subdivided the wider session to 25%) is correct. New rule: subdivision applies ONLY between sessions with EXACTLY the same lane range (same left+width groupKey). Wider blocks like 1/2 promo and promo entière keep their full lane width when co-existing with narrower contained sessions. 22 TEST sessions created across 5 days, all 6 spec cases verified via inline style.left/width inspection of session-block parents. 16/16 validations PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js ~628-706: refactored IIFE correctly uses groupKey = left.toFixed(2)|width.toFixed(2) for clustering. Only sessions with identical lane ranges form a subdivision group. Greedy interval-graph coloring per group → totalByIdx based on max col index of time-overlapping siblings in the same group. Correct and elegant.",
+    "Case 4 (user bug) confirmed fixed: 1/2 promo keeps 50% width and Groupe 1 keeps 12.5% width — they visually overlap on lanes 0..1 but this is now correctly treated as a DATA conflict (to be surfaced by Alertes) rather than masked by visual subdivision. Matches the iter12 design intent.",
+    "User case (1/2 promo + 7 sub-groups on lanes 8..14) confirmed: 1/2 promo = 0%/50%, each Gxx = own position/6.25% — totalByIdx=1 for all because no two sessions share exact same groupKey. This was the iter11 regression now fixed.",
+    "Case 5 (non-overlapping time, same lane range): both promo entière sessions placed in column 0 by greedy coloring, totalByIdx=1 each → full 100% width. Correct iter4-style stacking by time.",
+    "groupToLanes regex still caps at single digit (1..8). Library group 'Groupe 8a' must use letter form to be recognized; bare 'Groupe 10' would silently produce []. Not blocking but worth noting."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (16/16 validations pass)"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (verified working)",
+  "seed_data_creation": "Created 7 new groups (Groupe 5a/5b/6a/6b/7a/7b/8a) tied to Promo 2026-2029, reused existing 1/2 promo + Groupe 1 + Groupe 2. Created 22 TEST_ITER12 sessions on 2026-12-07..11. ALL cleaned up at end of run: 22/22 sessions DELETEd + 7/7 created groups DELETEd. Database left in original state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter12 layout/anti-overlap verified by inspecting inline style of session-block PARENT (.absolute wrapper). Measured left%/width% values matched expectations exactly. Results: USER case → 1/2 promo (0%/50%) + 7×(own_lane/6.25%); C1 → 3×(0,33.33,66.67)/33.33% ; C2 → 5×(0,2.5,5,7.5,10)/2.5% ; C3 → G1(0%/12.5%) + G2(12.5%/12.5%) ; C4 → 1/2 promo(0%/50%) + G1(0%/12.5%) (visually overlap = real data conflict, not masked); C5 → both promo entière at 0%/100% (no time overlap). Reproduce by POST /api/sessions with promotion_id + group_ids, navigate /planning-global, set date-picker + click filter-promo-{pid}, then page.evaluate parentElement.style of each [data-testid=session-block-{id}].",
+  "rca of the issue": "N/A — no functional bug found. Iter12 fix for iter11 regression is correct. The algorithmic change (group by exact lane-range key vs lane-overlap BFS cluster) properly preserves wider session widths while still subdividing identical-lane-range siblings. Case 4 visual overlap is intentional behavior signaling a data-level conflict to be handled by Alertes, not by the layout engine."
+}
