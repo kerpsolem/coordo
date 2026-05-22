@@ -626,79 +626,97 @@ export default function PlanningGlobal() {
                     </div>
                   )}
                   {(() => {
-                    // 1) Compute base lane layout for each session
-                    const sessLayouts = daySessions.map(s => ({ s, layout: computeLaneLayout(s.group_ids || (s.group_id ? [s.group_id] : []), groups) }));
-                    const n = sessLayouts.length;
-                    // 2) For each session, find sessions with the EXACT SAME lane range that also overlap in time.
-                    //    Only sessions with identical lane ranges need subdivision (otherwise wider blocks like 1/2 promo
-                    //    should keep their full lane width).
-                    const groupKey = (l) => `${l.left.toFixed(2)}|${l.width.toFixed(2)}`;
-                    const sameGroup = new Array(n).fill(null).map(() => []);
-                    for (let i = 0; i < n; i++) {
-                      const A = sessLayouts[i];
-                      const aSt = timeToMin(A.s.heure_debut), aEn = timeToMin(A.s.heure_fin);
-                      const aKey = groupKey(A.layout);
-                      for (let j = 0; j < n; j++) {
-                        if (j === i) continue;
-                        const B = sessLayouts[j];
-                        if (groupKey(B.layout) !== aKey) continue;
-                        const bSt = timeToMin(B.s.heure_debut), bEn = timeToMin(B.s.heure_fin);
-                        if (bSt < aEn && bEn > aSt) sameGroup[i].push(j);
+                    // ---- iter13 : packing horizontal sans chevauchement, ratio préservé ----
+                    // Pour chaque session, on calcule sa LARGEUR cible (basée sur le nombre de lanes occupées
+                    // par ses groupes) et sa POSITION préférée (par lane minimum). Puis on place les sessions
+                    // côte à côte en partant de leur position préférée, en décalant à droite si chevauchement,
+                    // tout en préservant le ratio de largeur.
+                    const items = daySessions.map(s => {
+                      const groupIds = s.group_ids || (s.group_id ? [s.group_id] : []);
+                      if (!groupIds.length) return { s, widthPct: 100, preferredLeft: 0 };
+                      const lanes = new Set();
+                      for (const gid of groupIds) {
+                        const g = groups.find(x => x.id === gid);
+                        if (g) groupToLanes(g.libelle).forEach(l => lanes.add(l));
+                      }
+                      if (lanes.size === 0) return { s, widthPct: 100, preferredLeft: 0 };
+                      const arr = Array.from(lanes).sort((a, b) => a - b);
+                      const widthPct = (arr.length / 16) * 100;
+                      const min = arr[0], max = arr[arr.length - 1];
+                      const contiguous = (max - min + 1) === arr.length;
+                      let preferredLeft;
+                      if (contiguous) preferredLeft = (min / 16) * 100;
+                      else {
+                        const lc = arr.filter(l => l < 8).length;
+                        const rc = arr.length - lc;
+                        preferredLeft = lc >= rc ? 0 : 100 - widthPct;
+                      }
+                      return { s, widthPct, preferredLeft };
+                    });
+                    // BFS clusters (sessions overlapping in time)
+                    const N = items.length;
+                    const cluster = new Array(N).fill(-1);
+                    let cn = 0;
+                    for (let i = 0; i < N; i++) {
+                      if (cluster[i] !== -1) continue;
+                      cluster[i] = cn;
+                      const stack = [i];
+                      while (stack.length) {
+                        const cur = stack.pop();
+                        const aSt = timeToMin(items[cur].s.heure_debut), aEn = timeToMin(items[cur].s.heure_fin);
+                        for (let j = 0; j < N; j++) {
+                          if (cluster[j] !== -1) continue;
+                          const bSt = timeToMin(items[j].s.heure_debut), bEn = timeToMin(items[j].s.heure_fin);
+                          if (bSt < aEn && bEn > aSt) { cluster[j] = cn; stack.push(j); }
+                        }
+                      }
+                      cn++;
+                    }
+                    // For each cluster, find max simultaneous width sum → scale down if > 100%
+                    const placements = new Map();
+                    for (let c = 0; c < cn; c++) {
+                      const members = items.map((it, i) => ({ it, i })).filter(x => cluster[x.i] === c);
+                      let maxSum = 0;
+                      for (const m of members) {
+                        const aSt = timeToMin(m.it.s.heure_debut), aEn = timeToMin(m.it.s.heure_fin);
+                        let sum = 0;
+                        for (const o of members) {
+                          const oSt = timeToMin(o.it.s.heure_debut), oEn = timeToMin(o.it.s.heure_fin);
+                          if (oSt < aEn && oEn > aSt) sum += o.it.widthPct;
+                        }
+                        maxSum = Math.max(maxSum, sum);
+                      }
+                      const scale = maxSum > 100 ? 100 / maxSum : 1;
+                      // Sort: start time asc, widthPct desc (wider first), preferredLeft asc
+                      members.sort((a, b) => {
+                        const dt = timeToMin(a.it.s.heure_debut) - timeToMin(b.it.s.heure_debut);
+                        if (dt !== 0) return dt;
+                        if (a.it.widthPct !== b.it.widthPct) return b.it.widthPct - a.it.widthPct;
+                        return a.it.preferredLeft - b.it.preferredLeft;
+                      });
+                      for (const m of members) {
+                        const A = m.it;
+                        const aSt = timeToMin(A.s.heure_debut), aEn = timeToMin(A.s.heure_fin);
+                        let actualLeft = A.preferredLeft * scale;
+                        for (const o of members) {
+                          const p = placements.get(o.it.s.id);
+                          if (!p) continue;
+                          const oSt = timeToMin(o.it.s.heure_debut), oEn = timeToMin(o.it.s.heure_fin);
+                          if (oSt < aEn && oEn > aSt) actualLeft = Math.max(actualLeft, p.left + p.width);
+                        }
+                        const scaledWidth = A.widthPct * scale;
+                        const width = Math.max(0.8, Math.min(scaledWidth, 100 - actualLeft));
+                        placements.set(A.s.id, { left: actualLeft, width });
                       }
                     }
-                    // 3) Greedy column assignment for sessions with identical lane range
-                    const colByIdx = new Array(n).fill(0);
-                    const totalByIdx = new Array(n).fill(1);
-                    const visited = new Set();
-                    for (let i = 0; i < n; i++) {
-                      if (visited.has(i)) continue;
-                      // Build the group of sessions with the SAME lane range (including time-disjoint ones — those just don't conflict)
-                      const A = sessLayouts[i];
-                      const aKey = groupKey(A.layout);
-                      const allSame = [];
-                      for (let k = 0; k < n; k++) if (groupKey(sessLayouts[k].layout) === aKey) allSame.push(k);
-                      // Greedy interval-graph coloring within this same-lane-range group
-                      const sorted = allSame.slice().sort((a, b) => timeToMin(sessLayouts[a].s.heure_debut) - timeToMin(sessLayouts[b].s.heure_debut));
-                      const cols = []; // each col = list of {st,en}
-                      for (const idx of sorted) {
-                        const B = sessLayouts[idx];
-                        const bSt = timeToMin(B.s.heure_debut), bEn = timeToMin(B.s.heure_fin);
-                        let chosen = -1;
-                        for (let c = 0; c < cols.length; c++) {
-                          if (!cols[c].some(x => x.st < bEn && x.en > bSt)) { chosen = c; break; }
-                        }
-                        if (chosen === -1) { chosen = cols.length; cols.push([]); }
-                        cols[chosen].push({ st: bSt, en: bEn });
-                        colByIdx[idx] = chosen;
-                        visited.add(idx);
-                      }
-                      // Compute totalCols for each session in this same-lane-range group, based on its time-overlapping siblings
-                      for (const idx of allSame) {
-                        const B = sessLayouts[idx];
-                        const bSt = timeToMin(B.s.heure_debut), bEn = timeToMin(B.s.heure_fin);
-                        // max column index occupied by any time-overlapping session in this group + 1
-                        let maxCol = colByIdx[idx];
-                        for (const other of allSame) {
-                          if (other === idx) continue;
-                          const O = sessLayouts[other];
-                          const oSt = timeToMin(O.s.heure_debut), oEn = timeToMin(O.s.heure_fin);
-                          if (oSt < bEn && oEn > bSt) maxCol = Math.max(maxCol, colByIdx[other]);
-                        }
-                        totalByIdx[idx] = maxCol + 1;
-                      }
-                    }
-                    // 4) Render with subdivided width only within same-lane-range groups
-                    return sessLayouts.map(({ s, layout }, i) => {
+                    return daySessions.map(s => {
                       const isDragging = dragInfo?.sessionId === s.id;
                       const sTop = isDragging && dragPreview ? dragPreview.top : Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
                       const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18 * zoom, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
-                      const total = Math.max(1, totalByIdx[i]);
-                      const col = colByIdx[i];
-                      const subWidth = layout.width / total;
-                      const subLeft = layout.left + col * subWidth;
+                      const p = placements.get(s.id) || { left: 0, width: 100 };
                       return (
                         <div key={s.id} className={`absolute px-0.5 ${isDragging ? 'z-50' : 'z-[15]'}`}
-                          style={{ top: sTop, height: sHeight, width: `${subWidth}%`, left: `${subLeft}%` }}>
+                          style={{ top: sTop, height: sHeight, width: `${p.width}%`, left: `${p.left}%` }}>
                           {renderBlock(s)}
                         </div>
                       );

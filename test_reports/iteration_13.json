@@ -1,0 +1,25 @@
+{
+  "summary": "Iter13 horizontal-packing algorithm fully validated. All 6 scenarios (25 individual placement checks) pass with EXACT expected left% / width% values. Ratio of widths is preserved (no subdivision), and time-overlapping sessions are shifted right to eliminate visual overlap. Uniform scaling kicks in only when simultaneous width sum exceeds 100% (verified on Case C with 3 promo entière → scale 1/3).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js L628-724: iter13 IIFE is correct. Per-cluster maxSum scan is O(N^2) per day which is fine for typical day-loads (<30 sessions). Algorithm: compute (widthPct, preferredLeft) per session → BFS cluster on time-overlap → maxSum simultaneous → scale if >100% → greedy place by (start asc, width desc, preferredLeft asc) shifting right past time-overlapping placed siblings. Matches user requirement of ratio preservation + zero visual overlap.",
+    "Case D behavior (5 sessions G1 → 0/12.5/25/37.5/50 each at 12.5% width) is INTENTIONALLY different from iter12 (which subdivided into 5×2.5%). Confirmed working as specified in iter13.",
+    "groupToLanes still capped at single-digit groups 1..8 (regex /groupe\\s*0*(\\d)/). 'Groupe 10+' would silently produce no lanes. Same comment as iter12 — not blocking.",
+    "Note: order of equal-start sessions (e.g., Case D) depends on insertion order from API fetch since tie-break is preferredLeft asc and all 5 share preferredLeft=0. In practice this produces stable & deterministic layout in current run (verified)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "100% (25/25 placement checks pass)"},
+  "test_credentials": "admin@ifsi.fr / Admin123! (verified working)",
+  "seed_data_creation": "Created 7 TEST_ITER13 sub-groups (5a/5b/6a/6b/7a/7b/8a) and 25 TEST_ITER13 sessions spread across 2027-01-04..08 on Promo 2026-2029. ALL cleaned up at end: 25/25 sessions deleted + 7/7 groups deleted. Database left in original state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter13 layout verified via inline style inspection of parent of [data-testid=session-block-{id}]. All 6 spec scenarios passed exact value comparison (tol 0.5%). Scenarios: A (1/2 promo + G1..G4 → 50/0 + 4×12.5% at 50/62.5/75/87.5), B (1/2 promo + 7 sub-groups → 50/0 + 7×6.25% at 50→87.5), C (3 promo entière → 33.33% each at 0/33.33/66.67), D (5×G1 → 12.5% each at 0/12.5/25/37.5/50, NO scale), E (G1 disjoint times → both 0/12.5), F (G1+G2 → 0/12.5 + 12.5/12.5). Reproduce: POST /api/sessions, GET /planning-global, set date-picker=2027-01-04 + click filter-promo-{pid}, page.evaluate parentElement.style.{left,width}.",
+  "rca of the issue": "N/A — no functional bug found. Iter13 algorithm meets spec exactly. Wider sessions placed first, narrower sessions shifted right past their right-edges, scaling reserved for when simultaneous widths sum >100%. Ratio of widths preserved across all six scenarios."
+}
