@@ -7,7 +7,7 @@ import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, get
 import { fr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer, Legend } from 'recharts';
 
-const PIE_COLORS = ['#6366F1', '#34D399', '#FBBF24', '#F43F5E', '#A78BFA', '#06B6D4', '#F97316', '#94A3B8', '#38BDF8', '#FB923C', '#818CF8'];
+const PIE_COLORS = ['#E97451', '#0E1F36', '#F4B393', '#1B3057', '#FFB088', '#395682', '#FBE9D7', '#6C8AB5', '#BF5430', '#9DAFCC', '#2B4A78'];
 
 export default function Dashboard() {
   const [data, setData] = useState(null);

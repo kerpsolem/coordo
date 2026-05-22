@@ -173,13 +173,13 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-background">
         {isCoordPage && showCoordination && (
-          <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-6 py-1.5">
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 tracking-wider uppercase">Mode edition</span>
+          <div className="bg-[#FFF1E8] dark:bg-[#3A2515] border-b border-[#F8DBC2] dark:border-[#7A4A2A] px-6 py-1.5">
+            <span className="text-xs font-semibold text-[#E97451] dark:text-[#FF9166] tracking-widest uppercase">Mode édition</span>
           </div>
         )}
-        <div className="flex items-center justify-between px-6 py-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="flex items-center justify-between px-6 py-2 border-b border-[#E8DFD0] dark:border-slate-800 bg-background">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} data-testid="toggle-sidebar" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
             {sidebarOpen ? <X size={20}/> : <Menu size={20}/>}
           </button>
