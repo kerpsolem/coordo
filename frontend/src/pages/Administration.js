@@ -71,16 +71,18 @@ export default function Administration() {
     if (!window.confirm(`Créer 16 sous-groupes (Groupe 1a → Groupe 8b) ${promoId ? 'pour ' + promoLabel : '(génériques, toutes promos)'} ?\n\nLes groupes déjà existants avec le même libellé seront ignorés.`)) return;
     try {
       const existing = new Set(groups.filter(g => (g.promotion_id || '') === (promoId || '')).map(g => (g.libelle || '').toLowerCase()));
-      let created = 0, skipped = 0;
+      const toCreate = [];
       for (let n = 1; n <= 8; n++) {
         for (const letter of ['a', 'b']) {
           const libelle = `Groupe ${n}${letter}`;
-          if (existing.has(libelle.toLowerCase())) { skipped++; continue; }
-          await API.post('/groups', { libelle, promotion_id: promoId });
-          created++;
+          if (!existing.has(libelle.toLowerCase())) toCreate.push({ libelle, promotion_id: promoId });
         }
       }
-      alert(`Génération terminée : ${created} créé(s), ${skipped} déjà existant(s).`);
+      const results = await Promise.allSettled(toCreate.map(g => API.post('/groups', g)));
+      const created = results.filter(r => r.status === 'fulfilled').length;
+      const skipped = 16 - toCreate.length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      alert(`Génération terminée : ${created} créé(s), ${skipped} déjà existant(s)${failed ? `, ${failed} erreur(s)` : ''}.`);
       loadAll();
     } catch (e) {
       alert(e.response?.data?.detail || 'Erreur lors de la génération');
