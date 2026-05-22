@@ -18,6 +18,57 @@ function snapTo15(m) { return Math.round(m / 15) * 15; }
 const START_MIN = 7 * 60 + 30;
 const END_MIN = 18 * 60;
 const TOTAL_MIN = END_MIN - START_MIN;
+const LANES = 16; // 8 groupes × 2 sous-lettres (a/b) = 16 sous-colonnes
+
+// Parse a group libelle into the lane indices (0..15) it covers.
+// "Groupe 1a" -> [0]; "Groupe 1b" -> [1]; "Groupe 1" (no letter) -> [0, 1]
+// "1/2 promo" -> [0..7] (left half by default), "1/4 promo" -> [0..3], "1/8" -> [0]
+// Unknown -> []
+function groupToLanes(libelle) {
+  if (!libelle) return [];
+  const s = libelle.toLowerCase();
+  const mLetter = s.match(/groupe\s*0*(\d)\s*([ab])/);
+  if (mLetter) {
+    const n = parseInt(mLetter[1], 10);
+    if (n >= 1 && n <= 8) return [2 * (n - 1) + (mLetter[2] === 'b' ? 1 : 0)];
+  }
+  const mNum = s.match(/groupe\s*0*(\d)(?![\d\w])/);
+  if (mNum) {
+    const n = parseInt(mNum[1], 10);
+    if (n >= 1 && n <= 8) return [2 * (n - 1), 2 * (n - 1) + 1];
+  }
+  if (s.includes('1/2') || s.includes('demi')) return [0, 1, 2, 3, 4, 5, 6, 7];
+  if (s.includes('1/4') || s.includes('quart')) return [0, 1, 2, 3];
+  if (s.includes('1/8') || s.includes('huiti')) return [0];
+  return [];
+}
+
+// Given a list of group_ids and the groups collection, compute { left%, width% }.
+// - No groups -> full width (Promo entière)
+// - Lanes contiguous -> span min..max
+// - Lanes non-contiguous -> width = #lanes / 16, positioned to the side with majority
+function computeLaneLayout(groupIds, groups) {
+  if (!groupIds || groupIds.length === 0) return { left: 0, width: 100 };
+  const allLanes = new Set();
+  for (const gid of groupIds) {
+    const g = groups.find(x => x.id === gid);
+    if (!g) continue;
+    groupToLanes(g.libelle).forEach(l => allLanes.add(l));
+  }
+  if (allLanes.size === 0) return { left: 0, width: 100 };
+  const arr = Array.from(allLanes).sort((a, b) => a - b);
+  const minL = arr[0], maxL = arr[arr.length - 1];
+  const contiguous = (maxL - minL + 1) === arr.length;
+  if (contiguous) {
+    return { left: (minL / LANES) * 100, width: ((maxL - minL + 1) / LANES) * 100 };
+  }
+  // Non-contiguous : largeur = nb_lanes/16, position selon majorité gauche/droite
+  const leftCount = arr.filter(l => l < LANES / 2).length;
+  const rightCount = arr.length - leftCount;
+  const width = (arr.length / LANES) * 100;
+  if (leftCount >= rightCount) return { left: 0, width };
+  return { left: 100 - width, width };
+}
 
 export default function PlanningGlobal() {
   const { isAdmin } = useAuth();
@@ -578,12 +629,10 @@ export default function PlanningGlobal() {
                     const isDragging = dragInfo?.sessionId === s.id;
                     const sTop = isDragging && dragPreview ? dragPreview.top : Math.max(0, (timeToMin(s.heure_debut) - START_MIN) * PX_PER_MIN);
                     const sHeight = isDragging && dragPreview ? dragPreview.height : Math.max(18 * zoom, (timeToMin(s.heure_fin) - timeToMin(s.heure_debut)) * PX_PER_MIN);
-                    const overlapping = daySessions.filter(o => o.id !== s.id && timeToMin(o.heure_debut) < timeToMin(s.heure_fin) && timeToMin(o.heure_fin) > timeToMin(s.heure_debut));
-                    const total = overlapping.length + 1;
-                    const idx = overlapping.filter(o => daySessions.indexOf(o) < daySessions.indexOf(s)).length;
+                    const layout = computeLaneLayout(s.group_ids || (s.group_id ? [s.group_id] : []), groups);
                     return (
                       <div key={s.id} className={`absolute px-0.5 ${isDragging ? 'z-50' : 'z-[15]'}`}
-                        style={{ top: sTop, height: sHeight, width: `${100/total}%`, left: `${(idx*100)/total}%` }}>
+                        style={{ top: sTop, height: sHeight, width: `${layout.width}%`, left: `${layout.left}%` }}>
                         {renderBlock(s)}
                       </div>
                     );

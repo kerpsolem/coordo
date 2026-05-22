@@ -63,6 +63,29 @@ export default function Administration() {
   const [acceptRequest, setAcceptRequest] = useState(null);
   const [acceptRole, setAcceptRole] = useState('formateur');
   const [acceptPassword, setAcceptPassword] = useState('');
+  const [genGroupsPromo, setGenGroupsPromo] = useState('__none__');
+
+  const generateSubGroups = async () => {
+    const promoId = genGroupsPromo === '__none__' ? '' : genGroupsPromo;
+    const promoLabel = promoId ? (promotions.find(p => p.id === promoId)?.nom || '') : 'génériques';
+    if (!window.confirm(`Créer 16 sous-groupes (Groupe 1a → Groupe 8b) ${promoId ? 'pour ' + promoLabel : '(génériques, toutes promos)'} ?\n\nLes groupes déjà existants avec le même libellé seront ignorés.`)) return;
+    try {
+      const existing = new Set(groups.filter(g => (g.promotion_id || '') === (promoId || '')).map(g => (g.libelle || '').toLowerCase()));
+      let created = 0, skipped = 0;
+      for (let n = 1; n <= 8; n++) {
+        for (const letter of ['a', 'b']) {
+          const libelle = `Groupe ${n}${letter}`;
+          if (existing.has(libelle.toLowerCase())) { skipped++; continue; }
+          await API.post('/groups', { libelle, promotion_id: promoId });
+          created++;
+        }
+      }
+      alert(`Génération terminée : ${created} créé(s), ${skipped} déjà existant(s).`);
+      loadAll();
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erreur lors de la génération');
+    }
+  };
 
   const loadAll = async () => {
     try {
@@ -227,12 +250,36 @@ export default function Administration() {
             onAdd={() => openDialog('promotions')} onEdit={i => openDialog('promotions', i)} onDelete={id => del('promotions', id)} />
         </TabsContent>
         <TabsContent value="groups">
-          <CrudTable title="Groupes" icon={Layers} items={groups} isAdmin={isAdmin}
-            columns={[
-              { key: 'libelle', label: 'Libellé' },
-              { key: 'promotion_id', label: 'Promotion', render: i => i.promotion_id ? (promotions.find(p => p.id === i.promotion_id)?.nom || '?') : <span className="text-slate-400 italic text-xs">Générique (toutes promos)</span> }
-            ]}
-            onAdd={() => openDialog('groups')} onEdit={i => openDialog('groups', i)} onDelete={id => del('groups', id)} />
+          <div className="space-y-3">
+            <Card className="p-3 bg-[#FFF1E8] border-[#F8DBC2]">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-[#0E1F36]">Générer automatiquement les sous-groupes (1a, 1b … 8b)</p>
+                  <p className="text-xs text-slate-600">Crée d'un clic les 16 sous-groupes liés à une promotion (ou en génériques).</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={genGroupsPromo} onValueChange={setGenGroupsPromo}>
+                    <SelectTrigger className="w-48 h-8 text-xs bg-white" data-testid="gen-groups-promo">
+                      <SelectValue placeholder="Choisir promotion" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Génériques (toutes promos)</SelectItem>
+                      {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" className="bg-[#E97451] hover:bg-[#D26340] text-white h-8" onClick={generateSubGroups} data-testid="gen-groups-btn">
+                    Générer 1a → 8b
+                  </Button>
+                </div>
+              </div>
+            </Card>
+            <CrudTable title="Groupes" icon={Layers} items={groups} isAdmin={isAdmin}
+              columns={[
+                { key: 'libelle', label: 'Libellé' },
+                { key: 'promotion_id', label: 'Promotion', render: i => i.promotion_id ? (promotions.find(p => p.id === i.promotion_id)?.nom || '?') : <span className="text-slate-400 italic text-xs">Générique (toutes promos)</span> }
+              ]}
+              onAdd={() => openDialog('groups')} onEdit={i => openDialog('groups', i)} onDelete={id => del('groups', id)} />
+          </div>
         </TabsContent>
         <TabsContent value="sites">
           <CrudTable title="Sites" icon={MapPin} items={sites} isAdmin={isAdmin}
