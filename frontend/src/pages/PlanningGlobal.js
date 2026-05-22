@@ -602,7 +602,7 @@ export default function PlanningGlobal() {
               const vacanceNom = vacancesByPromo[promoId]?.[dayStr];
               const daySessions = promoSessions.filter(s => s.date === dayStr).sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
               return (
-                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''} ${dragOverDay === `${promoId}|${dayStr}` ? 'ring-2 ring-violet-400 ring-inset bg-violet-50/40' : ''} ${dragActivite && !isDropAllowed(dragActivite, promoId) ? 'opacity-50' : ''}`} style={{ height: GRID_H }}
+                <div key={di} className={`border-r border-slate-200 dark:border-slate-700 relative overflow-hidden ${ferie ? 'bg-purple-50/40 dark:bg-purple-950/10' : ''} ${vacanceNom ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''} ${dragOverDay === `${promoId}|${dayStr}` ? 'ring-2 ring-violet-400 ring-inset bg-violet-50/40' : ''} ${dragActivite && !isDropAllowed(dragActivite, promoId) ? 'opacity-50' : ''}`} style={{ height: GRID_H }}
                   data-day={dayStr}
                   onMouseDown={(e) => handleGridMouseDown(e, dayStr)}
                   onDragOver={(e) => { if (dragActivite && isDropAllowed(dragActivite, promoId)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverDay(`${promoId}|${dayStr}`); } }}
@@ -697,16 +697,43 @@ export default function PlanningGlobal() {
                       for (const m of members) {
                         const A = m.it;
                         const aSt = timeToMin(A.s.heure_debut), aEn = timeToMin(A.s.heure_fin);
-                        let actualLeft = A.preferredLeft * scale;
+                        const scaledWidth = A.widthPct * scale;
+                        const scaledPref = A.preferredLeft * scale;
+                        // Build list of BLOCKED intervals from time-overlapping placed siblings
+                        const blocked = [];
                         for (const o of members) {
                           const p = placements.get(o.it.s.id);
                           if (!p) continue;
                           const oSt = timeToMin(o.it.s.heure_debut), oEn = timeToMin(o.it.s.heure_fin);
-                          if (oSt < aEn && oEn > aSt) actualLeft = Math.max(actualLeft, p.left + p.width);
+                          if (oSt < aEn && oEn > aSt) blocked.push({ left: p.left, right: p.left + p.width });
                         }
-                        const scaledWidth = A.widthPct * scale;
-                        const width = Math.max(0.8, Math.min(scaledWidth, 100 - actualLeft));
-                        placements.set(A.s.id, { left: actualLeft, width });
+                        blocked.sort((a, b) => a.left - b.left);
+                        // Build FREE gaps in [0..100]
+                        const gaps = [];
+                        let cursor = 0;
+                        for (const b of blocked) {
+                          if (b.left > cursor + 0.05) gaps.push({ left: cursor, width: b.left - cursor });
+                          cursor = Math.max(cursor, b.right);
+                        }
+                        if (cursor < 99.95) gaps.push({ left: cursor, width: 100 - cursor });
+                        // Choose the best gap : prefer one that contains preferredLeft and fits scaledWidth ;
+                        // else the gap closest to preferredLeft that fits ; else the largest gap (shrink)
+                        const fitting = gaps.filter(g => g.width >= scaledWidth - 0.05);
+                        let target = null;
+                        if (fitting.length) {
+                          target = fitting.find(g => g.left <= scaledPref + 0.05 && scaledPref + scaledWidth <= g.left + g.width + 0.05);
+                          if (!target) target = fitting.slice().sort((a, b) => Math.abs(a.left - scaledPref) - Math.abs(b.left - scaledPref))[0];
+                        } else if (gaps.length) {
+                          target = gaps.slice().sort((a, b) => b.width - a.width)[0];
+                        } else {
+                          target = { left: 0, width: scaledWidth };
+                        }
+                        // Position within chosen gap
+                        const minLeft = target.left;
+                        const maxLeft = target.left + target.width - scaledWidth;
+                        const actualLeft = Math.max(minLeft, Math.min(scaledPref, maxLeft));
+                        const width = Math.min(scaledWidth, target.left + target.width - actualLeft);
+                        placements.set(A.s.id, { left: Math.max(0, actualLeft), width: Math.max(0.8, width) });
                       }
                     }
                     return daySessions.map(s => {

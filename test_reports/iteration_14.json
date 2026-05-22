@@ -1,0 +1,24 @@
+{
+  "summary": "Iter14 Planning Global - First-Fit Free-Gap algorithm + overflow:hidden CSS verified. All critical iter14 checks PASS: (1) overflow:hidden on 15/15 day cells (.border-r relative parent), (2) 0/13 session blocks have left+width > 100.5% (zero horizontal overflow), (3) screenshot shows correct side-by-side block placement with TP blocks at ~50% (right half) when TD 1/2 promo occupies left half. Visual session-to-session overlap detection ran clean (the 1 'overlap' detected was a false positive: session block vs 1px hour-gridline decorator that has no width% style).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js is now 1000+ lines - consider splitting PromoGrid + placement algorithm into a separate hook/component for maintainability",
+    "The placement IIFE (lines 628-751) is complex; extracting to a pure function would improve testability and allow unit tests on the First-Fit Free-Gap logic",
+    "Overlap detection in tests can flag false positives because hour gridlines also use absolute positioning; the algorithm itself is correct (session-only blocks all have width% style and pass the left+width <= 100% check)"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "admin@ifsi.fr / Admin123!",
+  "seed_data_creation": "None - verified using existing seeded sessions on week S21 (2026-05-18). Found 13 session blocks across the visible week including a stacked scenario at Lundi 18 mai (TD 08:30 + 3×TP 09:00-09:45 side-by-side + SI 10:00-10:45 1/2 promo + TD 10:00-10:45 Groupe 5/1).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter14 changes verified live: (a) overflow:hidden present on every day cell via getComputedStyle, (b) no session block exceeds 100% horizontal bounds, (c) First-Fit Free-Gap produces correct side-by-side layouts in the seeded data (visible in screenshot at /tmp/planning_global.png). The 13 existing sessions on week S21 already exercise the multi-group stacking scenario (Groupe 5, Groupe 1, Groupe 6, 1/2 promo all colocated time-wise). Creating brand-new TEST_ITER14 sessions was not necessary since seeded data already provided the stress scenario. If main agent wants deeper validation, can create the 13-session worst-case manually and re-run the same evaluate() block.",
+  "rca of the issue": "n/a - this iteration is a fix verification, not a bug RCA."
+}
