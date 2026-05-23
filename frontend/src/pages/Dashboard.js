@@ -25,6 +25,10 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([API.get('/promotions'), API.get('/school-years'), API.get('/activity-types')]).then(([p, sy, at]) => {
       setPromotions(p.data); setSchoolYears(sy.data); setActTypes(at.data);
+      // Default to current school year (one that contains today's date)
+      const today = new Date().toISOString().slice(0, 10);
+      const current = sy.data.find(s => s.date_debut && s.date_fin && s.date_debut <= today && today <= s.date_fin);
+      if (current) setFilterAnneeSco(current.id);
     }).catch(() => {});
   }, []);
 

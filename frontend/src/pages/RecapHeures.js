@@ -75,6 +75,12 @@ export default function RecapHeures() {
       setActTypes(atRes.data);
       setSchoolYears(syRes.data);
       setUeData(ueRes.data);
+      // Default to current school year on first load
+      if (filterAnneeSco === 'all' && syRes.data?.length) {
+        const today = new Date().toISOString().slice(0, 10);
+        const current = syRes.data.find(s => s.date_debut && s.date_fin && s.date_debut <= today && today <= s.date_fin);
+        if (current) setFilterAnneeSco(current.id);
+      }
     } catch (e) { console.error(e); }
   }, [dateDebut, dateFin, filterFormateur, filterPromo, filterType, filterSemestre, filterAnneeSco, schoolYears]);
 

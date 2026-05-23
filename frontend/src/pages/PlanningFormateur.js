@@ -42,7 +42,12 @@ export default function PlanningFormateur() {
     API.get('/activity-types').then(r => setActTypes(r.data));
     API.get('/promotions').then(r => setPromotions(r.data));
     API.get('/ues').then(r => setUes(r.data));
-    API.get('/school-years').then(r => setSchoolYears(r.data));
+    API.get('/school-years').then(r => {
+      setSchoolYears(r.data);
+      const today = new Date().toISOString().slice(0, 10);
+      const current = r.data.find(s => s.date_debut && s.date_fin && s.date_debut <= today && today <= s.date_fin);
+      if (current) setFilterAnneeSco(current.id);
+    });
   }, []);
 
   const fetchData = useCallback(async () => {
