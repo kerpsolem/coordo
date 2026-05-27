@@ -318,6 +318,11 @@ export default function CoordinationPlanning() {
         {/* Sessions list (compact rows like screenshot) */}
         <Card>
           <CardContent className="p-0">
+            {/* Legend */}
+            <div className="flex items-center justify-end gap-4 px-3 py-1.5 text-[10px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+              <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded inline-flex items-center justify-center text-[9px] font-bold bg-emerald-500 text-white">V</span> Validé / <span className="w-4 h-4 rounded inline-flex items-center justify-center text-[9px] font-bold bg-slate-200 text-slate-600">P</span> Prévu</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded inline-flex items-center justify-center bg-green-100"><Check size={10} className="text-green-600" /></span> Saisi</span>
+            </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {filtered.map(s => {
                 const at = atMap[s.type_activite_id];
@@ -335,6 +340,21 @@ export default function CoordinationPlanning() {
                     <span className="font-bold text-slate-800 dark:text-slate-200 w-20 truncate" title={(s.formateur_ids || []).map(fid => fmMap[fid] && `${fmMap[fid].prenom} ${fmMap[fid].nom}`).filter(Boolean).join(', ')}>
                       {(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).filter(Boolean).join(', ')}
                     </span>
+                    {/* Statut toggle (admin only — Prevu/Valide) */}
+                    {(() => {
+                      const isValide = s.statut === 'Valide';
+                      return (
+                        <button
+                          onClick={() => isAdmin && toggleField(s.id, 'statut', s.statut)}
+                          disabled={!isAdmin}
+                          title={isAdmin ? `Statut : ${isValide ? 'Validé — cliquer pour repasser en Prévu' : 'Prévu — cliquer pour valider'}` : `Statut : ${isValide ? 'Validé' : 'Prévu'}`}
+                          className={`w-5 h-5 rounded inline-flex items-center justify-center text-[9px] font-bold ${isValide ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'} ${isAdmin ? 'cursor-pointer hover:ring-2 hover:ring-emerald-300' : 'cursor-default'}`}
+                          data-testid={`toggle-statut-${s.id}`}
+                        >
+                          {isValide ? 'V' : 'P'}
+                        </button>
+                      );
+                    })()}
                     {(() => {
                       const isValide = s.statut === 'Valide';
                       // Secretariat: can toggle only on validated sessions. Admin: always.
