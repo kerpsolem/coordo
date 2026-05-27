@@ -153,6 +153,17 @@ export default function PlanningGlobal() {
   const promoMap = mk(promotions), fmMap = mk(formateurs), atMap = mk(actTypes);
   const ueMap = mk(ues), domMap = mk(domains), siteMap = mk(sites), grpMap = mk(groups);
 
+  // Stable color palette per domain (used when domain has no custom couleur)
+  const DOMAIN_PALETTE = ['#22C55E', '#EC4899', '#3B82F6', '#F59E0B', '#8B5CF6', '#06B6D4', '#EF4444', '#84CC16'];
+  const getDomainColor = (d) => {
+    if (!d) return '#cbd5e1';
+    if (d.couleur) return d.couleur;
+    const key = d.id || d.nom || '';
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = ((h * 31) + key.charCodeAt(i)) >>> 0;
+    return DOMAIN_PALETTE[h % DOMAIN_PALETTE.length];
+  };
+
   const prevWeek = () => setCurrentDate(d => addWeeks(d, -1));
   const nextWeek = () => setCurrentDate(d => addWeeks(d, 1));
   const displayPromos = selectedPromos.size === 0 ? promotions : promotions.filter(p => selectedPromos.has(p.id));
@@ -554,7 +565,7 @@ export default function PlanningGlobal() {
         {/* Domaine */}
         {dom.nom && (
           <div className="flex items-start gap-3 mb-2 text-sm text-slate-700 dark:text-slate-300">
-            <span className="inline-block w-4 h-4 rounded-sm flex-shrink-0 mt-0.5" style={{ backgroundColor: dom.couleur || '#cbd5e1' }} />
+            <span className="inline-block w-4 h-4 rounded-sm flex-shrink-0 mt-0.5 ring-1 ring-black/5" style={{ backgroundColor: getDomainColor(dom) }} data-testid="tooltip-domain-color" />
             <span className="leading-tight">{dom.nom}</span>
           </div>
         )}
