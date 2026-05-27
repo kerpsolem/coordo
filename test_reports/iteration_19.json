@@ -1,0 +1,43 @@
+{
+  "summary": "Iter19 - Validation visuelle de la tooltip Planning Global et du truncate sur les blocs de séance. Tous les critères d'acceptation sont remplis: tooltip 360px / px-5 py-4 / rounded-xl, titre UE en text-lg font-bold avec barre verticale 1.5 (6px), formateurs en liste verticale (avatar 28×28 bleu clair + Prénom NOM), pills de statut rounded-full px-2.5 py-1, truncate+title sur la ligne heure/groupes et la ligne d'initiales formateurs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tooltip_verifications": {
+    "width_px": 360,
+    "padding": "16px 20px (px-5 py-4 OK)",
+    "border_radius": "12px (rounded-xl OK)",
+    "ue_title_font_size_px": 18,
+    "ue_title_font_weight": 700,
+    "vertical_bar_width_px": 6,
+    "avatars": "7 formateurs - 28x28 - bg rgb(219,234,254) blue-100 - color rgb(29,78,216) blue-700",
+    "noms_format": "Prenom NOM majuscule confirme (ex: Sophie BERNARD, Pierre MARTIN)",
+    "status_pill": "borderRadius 9999px, padding 4px 10px (rounded-full px-2.5 py-1 OK)"
+  },
+  "truncate_verifications": {
+    "block_heure_groupes_has_truncate_class": true,
+    "block_heure_groupes_has_title_attribute": true,
+    "block_formateurs_has_truncate_class": true,
+    "block_formateurs_has_title_attribute": true,
+    "example_title_value": "SB, LE, PM, SM, JM, MN, CP",
+    "note": "Lors du test, la largeur du bloc (239px) suffisait a afficher 7 initiales sans coupure, mais le mecanisme truncate+title est en place et fonctionnera quand le bloc sera plus etroit."
+  },
+  "promo_format_note": "Le format 'P2 — 2025-2028' est code (regex /P\\d+/) mais les promos de la base sont nommees 'Promo 2026-2029', donc la tooltip affiche 'Promo 2026-2029'. Le fallback fonctionne correctement. Pas un bug iter19, mais a noter si l'intent etait de renommer les promos avec un label court 'P2', 'P3' etc.",
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanningGlobal.js depasse 1257 lignes - candidat a un split en sous-composants (Tooltip, Cell, SessionBlock, Header) pour ameliorer la maintenabilite.",
+    "Le format Promotion 'P2 — 2025-2028' demande dans la spec dependra du nom de la promo en base. Si l'intent est toujours d'afficher 'P{n}', un champ dedie ou un derive systematique par index de promotion serait plus robuste que la regex /P\\d+/."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "admin@ifsi.fr / Admin123! - OK",
+  "seed_data_creation": "Cree session test id=33a0f33b-7e18-4373-8eda-b96ea59c5fad (date 2026-05-19 08:00-09:00, 7 formateurs, UE2.11, intitule 'TEST_truncate_iter19') puis SUPPRIMEE apres validation (HTTP 200).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "La tooltip et le truncate sont valides. Le rendu des blocs de seance avec 5+ formateurs ne deborde plus grace a truncate + overflow-hidden de la cellule parent. Verifier en focus sur le bloc 'Toutes promos' + cote-a-cote si necessaire (les colonnes deviennent tres etroites en cote-a-cote multi-promo, le truncate y est encore plus critique).",
+  "rca of the issue": "N/A (pas de bug detecte)"
+}

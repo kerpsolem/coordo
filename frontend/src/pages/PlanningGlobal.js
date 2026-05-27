@@ -453,8 +453,8 @@ export default function PlanningGlobal() {
           )}
         </div>
         {s.intitule && <div className="truncate text-slate-700 dark:text-slate-200 font-medium" style={{ fontSize: baseFontSmall + 1 }}>{s.intitule}</div>}
-        <div className="text-slate-500" style={{ fontSize: baseFontSmall }}>{s.heure_debut}-{s.heure_fin}{grpLabel ? ` · ${grpLabel}` : ''}</div>
-        <div className="font-bold text-blue-700 dark:text-blue-300" style={{ fontSize: fontInit }}>{formInits}</div>
+        <div className="text-slate-500 truncate" style={{ fontSize: baseFontSmall }} title={`${s.heure_debut}-${s.heure_fin}${grpLabel ? ' · ' + grpLabel : ''}`}>{s.heure_debut}-{s.heure_fin}{grpLabel ? ` · ${grpLabel}` : ''}</div>
+        <div className="font-bold text-blue-700 dark:text-blue-300 truncate" style={{ fontSize: fontInit }} title={formInits}>{formInits}</div>
         {s.commentaire && (
           <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 truncate" style={{ fontSize: baseFontSmall - 1 }}>
             <MessageSquare size={baseFontSmall - 1} />{s.commentaire}
@@ -498,71 +498,73 @@ export default function PlanningGlobal() {
     const grpLabel = tGroupIds.map(gid => grpMap[gid]?.libelle).filter(Boolean).join(', ');
     const forms = (s.formateur_ids || []).map(fid => fmMap[fid]).filter(Boolean);
     const dur = ((timeToMin(s.heure_fin || '00:00') - timeToMin(s.heure_debut || '00:00')) / 60).toFixed(1);
+    const promoShort = promo.nom ? (promo.nom.match(/P\d+/)?.[0] || promo.nom.replace('Promotion ', '')) : '';
+    const yearLabel = promo.annee_debut && promo.annee_fin ? `${promo.annee_debut}-${promo.annee_fin}` : '';
     return (
-      <div className="fixed z-[100] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl p-3 w-80 tooltip-enter pointer-events-none"
+      <div className="fixed z-[100] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl px-5 py-4 w-[360px] tooltip-enter pointer-events-none"
         style={{ left: tooltipPos.x, top: tooltipPos.y }}>
-        {/* UE big title */}
-        {ue.code_ue && (
-          <div className="flex items-start gap-2 mb-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-            <div className="w-1 self-stretch rounded" style={{ backgroundColor: at.couleur || '#94a3b8' }} />
-            <div className="flex-1">
-              <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 leading-tight">UE {ue.code_ue} — {ue.intitule}</div>
-              {s.intitule && <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{s.intitule}</div>}
+        {/* UE Big title with vertical color bar */}
+        {(ue.code_ue || s.intitule) && (
+          <div className="flex items-start gap-3 mb-3 pb-3 border-b border-slate-200 dark:border-slate-700">
+            <div className="w-1.5 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: at.couleur || '#E97451' }} />
+            <div className="flex-1 min-w-0">
+              {ue.code_ue && <div className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">UE {ue.code_ue} — {s.intitule || ue.intitule}</div>}
+              {!ue.code_ue && s.intitule && <div className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">{s.intitule}</div>}
             </div>
           </div>
         )}
-        {/* Type + period */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: at.couleur || '#94a3b8' }} />
-          <span className="text-xs font-semibold" style={{ color: at.couleur }}>{at.nom}</span>
-          <span className="text-[10px] text-slate-500">— {at.description || at.nom}</span>
+        {/* Type */}
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: at.couleur || '#E97451' }} />
+          <span className="text-sm font-semibold" style={{ color: at.couleur || '#E97451' }}>{at.nom}</span>
+          {at.description && at.description !== at.nom && <span className="text-sm text-slate-500">— {at.description}</span>}
         </div>
         {/* Time */}
-        <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
-          <Clock size={12} className="text-slate-400" />
+        <div className="flex items-center gap-3 mb-3 text-sm text-slate-700 dark:text-slate-300">
+          <Clock size={16} className="text-slate-400 flex-shrink-0" />
           <span className="font-medium">{s.heure_debut} – {s.heure_fin}</span>
-          <span className="text-slate-500">({dur}h)</span>
+          <span className="text-slate-400">({dur}h)</span>
         </div>
-        {/* Formateurs */}
+        {/* Formateurs en colonne */}
         {forms.length > 0 && (
-          <div className="flex items-start gap-2 mb-1.5">
+          <div className="space-y-1.5 mb-3">
             {forms.map((f, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold">{f.initiales}</span>
-                <span className="text-xs text-slate-700 dark:text-slate-200">{f.prenom} {f.nom?.toUpperCase()}</span>
+              <div key={i} className="flex items-center gap-3">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold flex-shrink-0">{f.initiales}</span>
+                <span className="text-sm text-slate-800 dark:text-slate-100">{f.prenom} {f.nom?.toUpperCase()}</span>
               </div>
             ))}
           </div>
         )}
         {/* Promotion */}
         {promo.nom && (
-          <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
-            <GraduationCap size={12} className="text-slate-400" />
-            <span>{promo.nom.replace('Promotion ', '')}</span>
+          <div className="flex items-center gap-3 mb-2 text-sm text-slate-700 dark:text-slate-300">
+            <GraduationCap size={16} className="text-slate-400 flex-shrink-0" />
+            <span>{promoShort}{yearLabel ? ` — ${yearLabel}` : ''}</span>
             {grpLabel && <span className="text-slate-500">· {grpLabel}</span>}
           </div>
         )}
         {/* Lieu */}
         {site.nom && (
-          <div className="flex items-center gap-2 mb-1.5 text-xs text-slate-700 dark:text-slate-300">
-            <MapPin size={12} className="text-slate-400" />
+          <div className="flex items-center gap-3 mb-2 text-sm text-slate-700 dark:text-slate-300">
+            <MapPin size={16} className="text-slate-400 flex-shrink-0" />
             <span>{site.nom}</span>
           </div>
         )}
         {/* Domaine */}
         {dom.nom && (
-          <div className="flex items-center gap-2 mb-2 text-xs text-slate-700 dark:text-slate-300">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: dom.couleur || '#cbd5e1' }} />
-            <span>{dom.nom}</span>
+          <div className="flex items-start gap-3 mb-2 text-sm text-slate-700 dark:text-slate-300">
+            <span className="inline-block w-4 h-4 rounded-sm flex-shrink-0 mt-0.5" style={{ backgroundColor: dom.couleur || '#cbd5e1' }} />
+            <span className="leading-tight">{dom.nom}</span>
           </div>
         )}
         {/* Status pill */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex gap-1.5">
-          <span className={`text-[10px] px-2 py-0.5 rounded ${s.statut === 'Valide' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex gap-1.5 flex-wrap">
+          <span className={`text-xs px-2.5 py-1 rounded-full ${s.statut === 'Valide' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
             {s.statut === 'Valide' ? 'Validé' : 'Prévu'}
           </span>
-          {s.saisi && <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700">Saisi</span>}
-          {s.commentaire && <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-700 truncate max-w-[180px]">💬 {s.commentaire}</span>}
+          {s.saisi && <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Saisi</span>}
+          {s.commentaire && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 truncate max-w-[200px]">💬 {s.commentaire}</span>}
         </div>
       </div>
     );
