@@ -44,6 +44,8 @@ export default function CoordinationPlanning() {
   const [filterSemestre, setFilterSemestre] = useState('all');
   const [filterUe, setFilterUe] = useState('all');
   const [filterDomain, setFilterDomain] = useState('all');
+  const [filterPeriode, setFilterPeriode] = useState('all'); // 'all' | 'week'
+  const [filterSaisi, setFilterSaisi] = useState('all'); // 'all' | 'oui' | 'non'
   const [linkContext, setLinkContext] = useState(null); // {fiche_id, activite_id} when scheduling from "À programmer"
 
   const loadData = useCallback(async () => {
@@ -155,7 +157,11 @@ export default function CoordinationPlanning() {
     try {
       await API.patch(`/sessions/${id}/toggle`, { field, value: newValue });
       loadData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      const detail = e.response?.data?.detail || 'Modification impossible';
+      alert(detail);
+    }
   };
 
   const [confirmDelId, setConfirmDelId] = useState(null);
@@ -201,6 +207,18 @@ export default function CoordinationPlanning() {
   };
 
   const filtered = sessions.filter(s => {
+    // Periode filter: current ISO week (Mon..Sun)
+    if (filterPeriode === 'week') {
+      const now = new Date();
+      const day = (now.getDay() + 6) % 7; // 0=Mon..6=Sun
+      const monday = new Date(now); monday.setDate(now.getDate() - day); monday.setHours(0,0,0,0);
+      const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23,59,59,999);
+      const d = s.date ? new Date(s.date + 'T00:00:00') : null;
+      if (!d || d < monday || d > sunday) return false;
+    }
+    // Saisi filter
+    if (filterSaisi === 'oui' && !s.saisi) return false;
+    if (filterSaisi === 'non' && s.saisi) return false;
     if (search) {
       const lower = search.toLowerCase();
       const at = atMap[s.type_activite_id]?.nom || '';
@@ -280,6 +298,21 @@ export default function CoordinationPlanning() {
               {domains.map(d => <SelectItem key={d.id} value={d.id}>{d.nom}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={filterPeriode} onValueChange={setFilterPeriode}>
+            <SelectTrigger className="w-40" data-testid="filter-periode"><SelectValue placeholder="Période" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Affichage total</SelectItem>
+              <SelectItem value="week">Cette semaine</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterSaisi} onValueChange={setFilterSaisi}>
+            <SelectTrigger className="w-40" data-testid="filter-saisi"><SelectValue placeholder="Saisie" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes saisies</SelectItem>
+              <SelectItem value="oui">Saisies (Oui)</SelectItem>
+              <SelectItem value="non">Non saisies</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Sessions list (compact rows like screenshot) */}
@@ -302,9 +335,23 @@ export default function CoordinationPlanning() {
                     <span className="font-bold text-slate-800 dark:text-slate-200 w-20 truncate" title={(s.formateur_ids || []).map(fid => fmMap[fid] && `${fmMap[fid].prenom} ${fmMap[fid].nom}`).filter(Boolean).join(', ')}>
                       {(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).filter(Boolean).join(', ')}
                     </span>
-                    <button onClick={() => canToggleSaisi && toggleField(s.id, 'saisi', !s.saisi)} className={`w-5 h-5 rounded inline-flex items-center justify-center ${s.saisi ? 'bg-green-100 dark:bg-green-900/30' : 'bg-slate-100 dark:bg-slate-800'} ${canToggleSaisi ? 'cursor-pointer' : ''}`} data-testid={`toggle-saisi-${s.id}`}>
-                      {s.saisi && <Check size={12} className="text-green-600" />}
-                    </button>
+                    {(() => {
+                      const isValide = s.statut === 'Valide';
+                      // Secretariat: can toggle only on validated sessions. Admin: always.
+                      const canClick = isAdmin || (isSecretariat && isValide);
+                      const disabledReason = isSecretariat && !isValide ? 'Saisie modifiable uniquement sur une séance validée' : '';
+                      return (
+                        <button
+                          onClick={() => canClick && toggleField(s.id, 'saisi', !s.saisi)}
+                          disabled={!canClick}
+                          title={disabledReason || (s.saisi ? 'Saisi : Oui' : 'Saisi : Non')}
+                          className={`w-5 h-5 rounded inline-flex items-center justify-center ${s.saisi ? 'bg-green-100 dark:bg-green-900/30' : 'bg-slate-100 dark:bg-slate-800'} ${canClick ? 'cursor-pointer hover:ring-2 hover:ring-coral-300' : 'opacity-40 cursor-not-allowed'}`}
+                          data-testid={`toggle-saisi-${s.id}`}
+                        >
+                          {s.saisi && <Check size={12} className="text-green-600" />}
+                        </button>
+                      );
+                    })()}
                     <div className="flex gap-0.5 shrink-0">
                       {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => startEdit(s)}><Edit2 size={11} /></Button>}
                       {canEdit && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => duplicateSession(s.id)}><Copy size={11} /></Button>}

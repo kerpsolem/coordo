@@ -431,10 +431,15 @@ async def toggle_session_field(id: str, request: Request):
     value = b.get("value")
     if field not in ["saisi", "statut"]:
         raise HTTPException(400, "Champ non autorise")
-    # Secretariat can only toggle 'saisi'
+    # Secretariat can only toggle 'saisi' on sessions with statut == 'Valide'
     if u.get("role") == "secretariat":
         if field != "saisi":
             raise HTTPException(403, "Le secretariat ne peut modifier que la saisie")
+        existing = await db.sessions.find_one({"id": id}, {"_id": 0, "statut": 1})
+        if not existing:
+            raise HTTPException(404, "Seance non trouvee")
+        if existing.get("statut") != "Valide":
+            raise HTTPException(403, "La saisie ne peut etre modifiee que sur une seance validee")
     elif u.get("role") not in ["super_admin", "admin_coordination"]:
         raise HTTPException(403, "Acces non autorise")
     return await crud_update("sessions", id, {field: value})
