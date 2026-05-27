@@ -362,7 +362,7 @@ export default function CoordinationPlanning() {
                       const disabledReason = isSecretariat && !isValide ? 'Saisie modifiable uniquement sur une séance validée' : '';
                       return (
                         <button
-                          onClick={() => canClick && toggleField(s.id, 'saisi', !s.saisi)}
+                          onClick={() => canClick && toggleField(s.id, 'saisi', s.saisi)}
                           disabled={!canClick}
                           title={disabledReason || (s.saisi ? 'Saisi : Oui' : 'Saisi : Non')}
                           className={`w-5 h-5 rounded inline-flex items-center justify-center ${s.saisi ? 'bg-green-100 dark:bg-green-900/30' : 'bg-slate-100 dark:bg-slate-800'} ${canClick ? 'cursor-pointer hover:ring-2 hover:ring-coral-300' : 'opacity-40 cursor-not-allowed'}`}
