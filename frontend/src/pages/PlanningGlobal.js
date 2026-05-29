@@ -92,6 +92,7 @@ export default function PlanningGlobal() {
   const [filterUE, setFilterUE] = useState('all');
   const [editSession, setEditSession] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
+  const [showSiteSection, setShowSiteSection] = useState(false);
   const [hoveredSession, setHoveredSession] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -1218,32 +1219,45 @@ export default function PlanningGlobal() {
                 <Select value={editSession.semestre||''} onValueChange={v=>setEditSession({...editSession,semestre:v})}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Choisir" /></SelectTrigger>
                   <SelectContent>{["S1","S2","S3","S4","S5","S6"].map(s=><SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
-              <div className="col-span-2"><Label className="text-xs">Salle(s)</Label>
+              <div className="col-span-2">
                 {(() => {
                   const ids = editSession.site_ids || (editSession.site_id ? [editSession.site_id] : []);
+                  const summary = ids.length === 0
+                    ? 'Aucune salle'
+                    : ids.map(id => sites.find(s => s.id === id)?.nom).filter(Boolean).join(', ');
                   return (
-                    <div className="flex flex-wrap gap-1.5 mt-1 items-center" data-testid="session-sites">
-                      <button type="button"
-                        className={`px-2 py-0.5 rounded border text-[11px] font-medium ${ids.length === 0 ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-500'}`}
-                        onClick={() => setEditSession({ ...editSession, site_ids: [], site_id: '' })}>
-                        Aucune salle
+                    <>
+                      <button type="button" onClick={() => setShowSiteSection(v => !v)}
+                        className="flex items-center justify-between w-full px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 text-xs hover:bg-slate-50 dark:hover:bg-slate-800"
+                        data-testid="toggle-site-section">
+                        <span className="font-medium text-slate-600 dark:text-slate-300">Salle(s) <span className="text-slate-400 font-normal ml-1.5">· {summary}</span></span>
+                        <span className="text-slate-400 text-[10px]">{showSiteSection ? '▾ masquer' : '▸ afficher'}</span>
                       </button>
-                      {sites.map(s => {
-                        const checked = ids.includes(s.id);
-                        return (
-                          <label key={s.id} className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer
-                            ${checked ? 'bg-slate-200 dark:bg-slate-700 border-slate-400' : 'border-slate-200 dark:border-slate-700'}`}>
-                            <input type="checkbox" className="w-3 h-3" checked={checked}
-                              onChange={e => {
-                                const next = e.target.checked ? [...ids, s.id] : ids.filter(i => i !== s.id);
-                                setEditSession({ ...editSession, site_ids: next, site_id: next[0] || '' });
-                              }} />
-                            {s.nom}
-                          </label>
-                        );
-                      })}
-                      {ids.length > 0 && <span className="text-[10px] text-slate-500 ml-auto">{ids.length} sélectionnée{ids.length > 1 ? 's' : ''}</span>}
-                    </div>
+                      {showSiteSection && (
+                        <div className="flex flex-wrap gap-1.5 mt-2 items-center" data-testid="session-sites">
+                          <button type="button"
+                            className={`px-2 py-0.5 rounded border text-[11px] font-medium ${ids.length === 0 ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-500'}`}
+                            onClick={() => setEditSession({ ...editSession, site_ids: [], site_id: '' })}>
+                            Aucune salle
+                          </button>
+                          {sites.map(s => {
+                            const checked = ids.includes(s.id);
+                            return (
+                              <label key={s.id} className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer
+                                ${checked ? 'bg-slate-200 dark:bg-slate-700 border-slate-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                                <input type="checkbox" className="w-3 h-3" checked={checked}
+                                  onChange={e => {
+                                    const next = e.target.checked ? [...ids, s.id] : ids.filter(i => i !== s.id);
+                                    setEditSession({ ...editSession, site_ids: next, site_id: next[0] || '' });
+                                  }} />
+                                {s.nom}
+                              </label>
+                            );
+                          })}
+                          {ids.length > 0 && <span className="text-[10px] text-slate-500 ml-auto">{ids.length} sélectionnée{ids.length > 1 ? 's' : ''}</span>}
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
               </div>
