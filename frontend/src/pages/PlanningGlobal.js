@@ -102,7 +102,7 @@ export default function PlanningGlobal() {
   const [dragingSession, setDraggingSession] = useState(null);
   const [dragActivite, setDragActivite] = useState(null); // activity from sidebar -> drop on grid
   const [dragOverDay, setDragOverDay] = useState(null); // promoId|dayStr while dragging activity
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [selectedDayIdxs, setSelectedDayIdxs] = useState([0, 1, 2, 3, 4]); // Lun=0..Ven=4
 
   const [dragInfo, setDragInfo] = useState(null);
