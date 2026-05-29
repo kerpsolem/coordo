@@ -311,7 +311,7 @@ async def list_sessions(request: Request, promotion_id: Optional[str] = None, fo
     if group_id:
         q["group_id"] = group_id
     if site_id:
-        q["site_id"] = site_id
+        q["$or"] = [{"site_id": site_id}, {"site_ids": site_id}]
     if annee_scolaire_id:
         q["annee_scolaire_id"] = annee_scolaire_id
     return await crud_list("sessions", q, sort=[("date", 1), ("heure_debut", 1)])

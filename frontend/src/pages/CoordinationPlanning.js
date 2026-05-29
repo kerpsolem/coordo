@@ -488,6 +488,36 @@ export default function CoordinationPlanning() {
                   ))}
                 </div>
               </div>
+              <div className="col-span-2">
+                <Label>Salle(s)</Label>
+                {(() => {
+                  const ids = editSession.site_ids || (editSession.site_id ? [editSession.site_id] : []);
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mt-1 items-center" data-testid="session-sites-coord">
+                      <button type="button"
+                        className={`px-2 py-1 rounded border text-xs font-medium ${ids.length === 0 ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-500'}`}
+                        onClick={() => setEditSession({ ...editSession, site_ids: [], site_id: '' })}>
+                        Aucune salle
+                      </button>
+                      {sites.map(s => {
+                        const checked = ids.includes(s.id);
+                        return (
+                          <label key={s.id} className={`flex items-center gap-1 px-2 py-1 rounded border text-xs cursor-pointer
+                            ${checked ? 'bg-slate-200 dark:bg-slate-700 border-slate-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                            <input type="checkbox" className="w-3 h-3" checked={checked}
+                              onChange={e => {
+                                const next = e.target.checked ? [...ids, s.id] : ids.filter(i => i !== s.id);
+                                setEditSession({ ...editSession, site_ids: next, site_id: next[0] || '' });
+                              }} />
+                            {s.nom}
+                          </label>
+                        );
+                      })}
+                      {ids.length > 0 && <span className="text-[10px] text-slate-500 ml-auto">{ids.length} sélectionnée{ids.length > 1 ? 's' : ''}</span>}
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="col-span-2 flex items-center gap-4">
                 <label className="flex items-center gap-2 text-sm"><Checkbox checked={editSession.saisi || false} onCheckedChange={v => setEditSession({ ...editSession, saisi: v })} /> Saisi</label>
               </div>
