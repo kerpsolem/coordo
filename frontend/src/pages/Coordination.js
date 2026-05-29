@@ -18,7 +18,7 @@ const TYPE_BADGE = {
   EVAL: { bg: 'bg-red-300', text: 'text-red-900' },
 };
 
-const GROUPES_PRESETS = ['Promo entière', 'Groupe 1', 'Groupe 2', 'Groupe 3', 'Demi-promo', '1/4 promo'];
+const GROUPES_PRESETS = ['Promo entière', '1/2 promo', '1/4 promo', '1/8', '1/16', 'Groupe 1', 'Groupe 2', 'Groupe 3'];
 
 // Build list of ISO weeks from a Date by going N weeks forward and back
 function buildWeekOptions(refDate = new Date(), backWeeks = 8, fwdWeeks = 60) {
@@ -291,7 +291,11 @@ export function FichesProjets() {
   const importUEs = async () => {
     try {
       const { data } = await API.post('/fiches-projet/import-ues');
-      alert(`Import: ${data.created} cree(s), ${data.skipped} deja existante(s).`);
+      const parts = [];
+      if (data.created) parts.push(`${data.created} créée(s)`);
+      if (data.merged) parts.push(`${data.merged} doublon(s) fusionné(s)`);
+      if (!parts.length) parts.push('Aucun changement');
+      alert(`Import UE : ${parts.join(' · ')}.`);
       load();
     } catch (e) { console.error(e); alert('Erreur'); }
   };
@@ -299,7 +303,12 @@ export function FichesProjets() {
   const importSessions = async () => {
     try {
       const { data } = await API.post('/fiches-projet/import-sessions');
-      alert(`Import: ${data.activites_added} activite(s), ${data.fiches_created} fiche(s) sur ${data.sessions_total} seance(s).`);
+      const parts = [];
+      if (data.activites_added) parts.push(`${data.activites_added} ajoutée(s)`);
+      if (data.refreshed) parts.push(`${data.refreshed} actualisée(s)`);
+      if (data.fiches_created) parts.push(`${data.fiches_created} fiche(s) créée(s)`);
+      if (!parts.length) parts.push('Aucun changement');
+      alert(`Récup. séances : ${parts.join(' · ')} (sur ${data.sessions_total} séance(s)).`);
       load();
     } catch (e) { console.error(e); alert('Erreur'); }
   };

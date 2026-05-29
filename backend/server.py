@@ -1058,92 +1058,141 @@ async def vacances_for_period(date_debut: str, date_fin: str, promotion_id: Opti
 async def import_sessions_to_fiches(request: Request):
     """
     Recupere toutes les sessions deja programmees et les ajoute comme activites
-    dans les fiches projet correspondantes (par ue_id + semestre + promotion_id).
+    dans les fiches projet correspondantes (par ue_id uniquement — une seule fiche par UE).
     Cree la fiche manquante si necessaire. Ne re-cree pas une activite deja liee
     (idempotent grace a session_id).
+    Auto-remplit: semaine, taille_groupe (1/8 ou 1/16 selon naming), nb_formateurs.
     """
+    import re as _re
     await require_admin(request)
     sessions = await db.sessions.find({"ue_id": {"$exists": True, "$ne": ""}}, {"_id": 0}).to_list(5000)
     fiches = await db.fiches_projet.find({}, {"_id": 0}).to_list(2000)
+    groups_db = await db.groups.find({}, {"_id": 0}).to_list(1000)
+    group_label_by_id = {g["id"]: g.get("libelle", "") for g in groups_db}
 
-    # Index existing activity session_ids across all fiches
-    linked_session_ids = set()
-    fiche_index = {}  # (ue_id, semestre, promotion_id) -> fiche
+    # Index existing activity session_ids and fiches by ue_id (one fiche per UE)
+    fiche_by_ue = {}
+    act_index = {}  # session_id -> (fiche_id, idx)
     for f in fiches:
-        for act in f.get("activites", []):
+        for idx, act in enumerate(f.get("activites", [])):
             if act.get("session_id"):
-                linked_session_ids.add(act["session_id"])
-        key = (f.get("ue_id"), f.get("semestre", ""), f.get("promotion_id", ""))
-        fiche_index[key] = f
+                act_index[act["session_id"]] = (f["id"], idx)
+        uid = f.get("ue_id")
+        if uid and uid not in fiche_by_ue:
+            fiche_by_ue[uid] = f
+
+    def infer_taille_groupe(group_ids):
+        if not group_ids:
+            return "Promo entière"
+        labels = [group_label_by_id.get(gid, "") for gid in group_ids]
+        labels = [l for l in labels if l]
+        if not labels:
+            return "Promo entière"
+        # Letter suffix pattern (e.g., "1a", "3b") => 1/16
+        if all(_re.fullmatch(r"\d+[a-z]", l) for l in labels):
+            return "1/16"
+        # Numeric-only or "Groupe N" pattern => 1/8
+        if all(_re.fullmatch(r"(Groupe\s+)?\d+", l) for l in labels):
+            return "1/8"
+        # Half/quarter presets
+        if all(l.lower().startswith("1/2") or "demi" in l.lower() for l in labels):
+            return "1/2 promo"
+        if all(l.startswith("1/4") for l in labels):
+            return "1/4 promo"
+        return labels[0]
+
+    def _semaine(date_str: str) -> str:
+        try:
+            if date_str:
+                d = datetime.strptime(date_str, "%Y-%m-%d").date()
+                _, iso_week, _ = d.isocalendar()
+                return f"S{iso_week}"
+        except Exception:
+            pass
+        return ""
+
+    def _gids(s: dict) -> list:
+        g = list(s.get("group_ids") or [])
+        if not g and s.get("group_id"):
+            g = [s["group_id"]]
+        return g
 
     created_fiches = 0
     added_activites = 0
+    refreshed = 0
     skipped = 0
 
     for s in sessions:
-        if s.get("id") in linked_session_ids:
-            skipped += 1
-            continue
         ue_id = s.get("ue_id")
         if not ue_id:
             skipped += 1
             continue
         sem = s.get("semestre") or ""
         promo = s.get("promotion_id") or ""
-        key = (ue_id, sem, promo)
+        sid = s.get("id")
+        gids = _gids(s)
+        taille = infer_taille_groupe(gids)
+        nb_form = len(s.get("formateur_ids") or [])
+        semaine = _semaine(s.get("date") or "")
 
-        fiche = fiche_index.get(key)
-        if not fiche:
-            # Try fallback: same UE + semestre, no promotion
-            fiche = fiche_index.get((ue_id, sem, "")) or fiche_index.get((ue_id, "", ""))
+        # If session already linked => refresh fields
+        if sid in act_index:
+            fiche_id, idx = act_index[sid]
+            target_fiche = next((x for x in fiches if x["id"] == fiche_id), None)
+            if target_fiche:
+                act = target_fiche["activites"][idx]
+                act["semaine_souhaitee"] = semaine or act.get("semaine_souhaitee", "")
+                act["taille_groupe"] = taille
+                act["group_ids"] = gids
+                act["nb_formateurs"] = nb_form if nb_form > 0 else None
+                act["formateur_ids"] = s.get("formateur_ids") or []
+                act["type_activite_id"] = s.get("type_activite_id") or act.get("type_activite_id", "")
+                act["heures"] = s.get("duree", act.get("heures", 0))
+                act["nom"] = s.get("intitule") or act.get("nom", "")
+                await db.fiches_projet.update_one({"id": fiche_id}, {"$set": {"activites": target_fiche["activites"]}})
+                refreshed += 1
+            continue
 
+        fiche = fiche_by_ue.get(ue_id)
         if not fiche:
             fiche = {
                 "id": str(uuid.uuid4()),
                 "ue_id": ue_id,
                 "semestre": sem,
-                "promotion_id": promo,
+                "promotion_id": "",
                 "activites": [],
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "auto_imported": True,
             }
             await db.fiches_projet.insert_one(fiche)
-            fiche_index[key] = fiche
+            fiches.append(fiche)
+            fiche_by_ue[ue_id] = fiche
             created_fiches += 1
-
-        # Compute ISO week from session.date for auto semaine_souhaitee
-        semaine = ""
-        try:
-            if s.get("date"):
-                d = datetime.strptime(s["date"], "%Y-%m-%d").date()
-                iso_year, iso_week, _ = d.isocalendar()
-                semaine = f"S{iso_week}"
-        except Exception:
-            semaine = ""
 
         new_act = {
             "id": str(uuid.uuid4()),
             "nom": s.get("intitule") or "(sans intitule)",
             "heures": s.get("duree", 0),
             "promotion_id": promo,
-            "taille_groupe": "demi_promo" if s.get("group_id") else "promo_entiere",
-            "group_ids": [s["group_id"]] if s.get("group_id") else [],
-            "nb_formateurs": len(s.get("formateur_ids") or []) or None,
+            "taille_groupe": taille,
+            "group_ids": gids,
+            "nb_formateurs": nb_form if nb_form > 0 else None,
             "semaine_souhaitee": semaine,
             "formateur_ids": s.get("formateur_ids") or [],
             "ordre": len(fiche.get("activites", [])),
             "type_activite_id": s.get("type_activite_id") or "",
-            "session_id": s.get("id"),
+            "session_id": sid,
         }
         fiche.setdefault("activites", []).append(new_act)
         await db.fiches_projet.update_one({"id": fiche["id"]}, {"$set": {"activites": fiche["activites"]}})
-        linked_session_ids.add(s["id"])
+        act_index[sid] = (fiche["id"], len(fiche["activites"]) - 1)
         added_activites += 1
 
     return {
         "sessions_total": len(sessions),
         "fiches_created": created_fiches,
         "activites_added": added_activites,
+        "refreshed": refreshed,
         "skipped": skipped,
     }
 
@@ -1211,12 +1260,58 @@ async def clone_fiches_promotion(request: Request):
 
 @api_router.post("/fiches-projet/import-ues")
 async def import_ues_to_fiches(request: Request):
-    """Crée une fiche projet vide pour chaque UE qui n'en a pas encore."""
+    """
+    Crée une fiche projet vide pour chaque UE qui n'en a pas encore.
+    Fusionne les fiches en double pour une même UE en une seule (par ue_id).
+    """
     await require_admin(request)
     ues = await db.ues.find({}, {"_id": 0}).to_list(2000)
-    existing = await db.fiches_projet.find({}, {"_id": 0, "ue_id": 1}).to_list(2000)
-    existing_ue_ids = {f.get("ue_id") for f in existing if f.get("ue_id")}
-    created = []
+    existing = await db.fiches_projet.find({}, {"_id": 0}).to_list(5000)
+
+    # Group existing fiches by ue_id
+    by_ue = {}
+    for f in existing:
+        uid = f.get("ue_id")
+        if uid:
+            by_ue.setdefault(uid, []).append(f)
+
+    created = 0
+    merged = 0
+
+    # Merge duplicates: keep first, append activites from others, delete others
+    for uid, group in by_ue.items():
+        if len(group) <= 1:
+            continue
+        # Sort by created_at to keep the oldest as primary
+        group.sort(key=lambda x: x.get("created_at", ""))
+        primary = group[0]
+        primary_acts = list(primary.get("activites", []))
+        seen_session_ids = {a.get("session_id") for a in primary_acts if a.get("session_id")}
+        for dup in group[1:]:
+            for act in dup.get("activites", []):
+                sid = act.get("session_id")
+                if sid and sid in seen_session_ids:
+                    continue
+                if sid:
+                    seen_session_ids.add(sid)
+                primary_acts.append(act)
+            await db.fiches_projet.delete_one({"id": dup["id"]})
+            merged += 1
+        # Re-order activites
+        for i, act in enumerate(primary_acts):
+            act["ordre"] = i
+            if not act.get("id"):
+                act["id"] = str(uuid.uuid4())
+        await db.fiches_projet.update_one(
+            {"id": primary["id"]},
+            {"$set": {"activites": primary_acts, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+
+    # Refresh existing UE ids after merge
+    existing_after = await db.fiches_projet.find({}, {"_id": 0, "ue_id": 1}).to_list(5000)
+    existing_ue_ids = {f.get("ue_id") for f in existing_after if f.get("ue_id")}
+
+    # Create missing fiches
     for ue in ues:
         if ue["id"] in existing_ue_ids:
             continue
@@ -1230,8 +1325,14 @@ async def import_ues_to_fiches(request: Request):
             "auto_imported": True,
         }
         await db.fiches_projet.insert_one(fiche)
-        created.append({k: v for k, v in fiche.items() if k != "_id"})
-    return {"created": len(created), "skipped": len(ues) - len(created), "total_ues": len(ues)}
+        created += 1
+
+    return {
+        "created": created,
+        "merged": merged,
+        "total_ues": len(ues),
+        "skipped": len(ues) - created,
+    }
 
 @api_router.post("/fiches-projet")
 async def create_fiche_projet(request: Request):
