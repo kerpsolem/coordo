@@ -1850,18 +1850,25 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
         bucket = _ensure(uid)
         dur = float(s.get("duree", 0) or 0)
         tname = act_types.get(s.get("type_activite_id"), {}).get("nom", "?")
-        nb_form = max(1, len(s.get("formateur_ids") or []))
+        formateur_ids = s.get("formateur_ids") or []
+        nb_form_real = len(formateur_ids)
+        nb_form = max(1, nb_form_real)
         # nb_groupes : 1 si pas de group_id ; >1 si group_id (par défaut 2). Si group_ids list -> len()
         gids = s.get("group_ids") or ([s["group_id"]] if s.get("group_id") else [])
         nb_groupes = max(1, len(gids)) if gids else 1
-        tf = dur * nb_form * nb_groupes
+        # Temps formateur : 0 si TPG (jamais compte) ou si aucun formateur n'est assigne
+        if tname == "TPG" or nb_form_real == 0:
+            tf = 0
+        else:
+            tf = dur * nb_form * nb_groupes
         bucket["total_heures"] += dur
         bucket["total_temps_formateur"] += tf
         bucket["par_type"][tname] = bucket["par_type"].get(tname, 0) + dur
         bucket["par_type_tf"][tname] = bucket["par_type_tf"].get(tname, 0) + tf
         bucket["details"].append({
             "source": "session", "id": s.get("id"), "date": s.get("date"),
-            "type": tname, "heures": dur, "nb_formateurs": nb_form,
+            "intitule": s.get("intitule") or "",
+            "type": tname, "heures": dur, "nb_formateurs": nb_form_real,
             "nb_groupes": nb_groupes, "temps_formateur": tf,
         })
 
@@ -1881,13 +1888,19 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
             if dur <= 0:
                 continue
             tname = act_types.get(act.get("type_activite_id"), {}).get("nom", "?")
-            nb_form = int(act.get("nb_formateurs") or len(act.get("formateur_ids") or []) or 1)
+            formateur_ids = act.get("formateur_ids") or []
+            nb_form_real = int(act.get("nb_formateurs") or len(formateur_ids) or 0)
+            nb_form = max(1, nb_form_real)
             gids = act.get("group_ids") or []
             if gids:
                 nb_groupes = max(1, len(gids))
             else:
                 nb_groupes = _nb_groupes_from_taille(act.get("taille_groupe", ""))
-            tf = dur * nb_form * nb_groupes
+            # Temps formateur : 0 si TPG ou si aucun formateur
+            if tname == "TPG" or nb_form_real == 0:
+                tf = 0
+            else:
+                tf = dur * nb_form * nb_groupes
             bucket = _ensure(uid)
             bucket["total_heures"] += dur
             bucket["total_temps_formateur"] += tf
@@ -1895,7 +1908,8 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
             bucket["par_type_tf"][tname] = bucket["par_type_tf"].get(tname, 0) + tf
             bucket["details"].append({
                 "source": "fiche", "id": act.get("id"), "nom": act.get("nom", ""),
-                "type": tname, "heures": dur, "nb_formateurs": nb_form,
+                "intitule": act.get("nom", ""),
+                "type": tname, "heures": dur, "nb_formateurs": nb_form_real,
                 "nb_groupes": nb_groupes, "temps_formateur": tf,
             })
 

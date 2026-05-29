@@ -326,19 +326,24 @@ export default function RecapHeures() {
                                 <details className="text-[11px]">
                                   <summary className="cursor-pointer text-slate-500 hover:text-slate-700">Voir le détail des séances/activités ({row.details.length})</summary>
                                   <table className="w-full mt-2 text-[11px]">
-                                    <thead className="text-slate-500"><tr><th className="text-left px-2 py-1">Source</th><th className="text-left">Date / Nom</th><th>Type</th><th className="text-right">H</th><th className="text-right">Nb form.</th><th className="text-right">Nb gpes</th><th className="text-right">TF</th></tr></thead>
+                                    <thead className="text-slate-500"><tr><th className="text-left px-2 py-1">Source</th><th className="text-left">Date</th><th className="text-left">Intitulé</th><th>Type</th><th className="text-right">H</th><th className="text-right">Nb form.</th><th className="text-right">Nb gpes</th><th className="text-right">TF</th></tr></thead>
                                     <tbody>
-                                      {row.details.map((d, i) => (
-                                        <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                                      {row.details.map((d, i) => {
+                                        const noForm = !d.nb_formateurs;
+                                        const isTPG = d.type === 'TPG';
+                                        const dim = noForm || isTPG;
+                                        return (
+                                        <tr key={i} className={`border-t border-slate-100 dark:border-slate-800 ${dim ? 'text-slate-400 italic' : ''}`}>
                                           <td className="px-2 py-0.5">{d.source === 'session' ? '📅 séance' : '📝 fiche'}</td>
-                                          <td>{d.source === 'session' ? d.date : (d.nom || '—')}</td>
-                                          <td className="text-center">{d.type}</td>
+                                          <td>{d.source === 'session' ? (d.date || '—') : '—'}</td>
+                                          <td className="truncate max-w-[260px]" title={d.intitule || d.nom || ''}>{d.intitule || d.nom || <span className="text-slate-400">—</span>}</td>
+                                          <td className="text-center">{d.type}{isTPG && <span className="ml-1 text-[9px] text-slate-400">(non compté)</span>}</td>
                                           <td className="text-right">{d.heures.toFixed(1)}h</td>
-                                          <td className="text-right">{d.nb_formateurs}</td>
+                                          <td className="text-right">{d.nb_formateurs || <span className="text-amber-600" title="Aucun formateur — temps formateur non compté">0</span>}</td>
                                           <td className="text-right">{d.nb_groupes}</td>
-                                          <td className="text-right font-bold text-violet-700">{d.temps_formateur.toFixed(1)}h</td>
+                                          <td className={`text-right font-bold ${d.temps_formateur > 0 ? 'text-violet-700' : 'text-slate-400'}`}>{d.temps_formateur.toFixed(1)}h</td>
                                         </tr>
-                                      ))}
+                                      );})}
                                     </tbody>
                                   </table>
                                 </details>
