@@ -2046,10 +2046,19 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
             })
 
     # 2) Chevauchements (overlap entre 2 séances pour le même formateur)
+    # Exclu : type TPG (temps personnel groupe : formateur non en activite d'enseignement)
+    act_types_map = {a["id"]: a for a in await crud_list("activity_types")}
+    def _is_tpg(sess):
+        return (act_types_map.get(sess.get("type_activite_id"), {}).get("nom", "") or "").upper() == "TPG"
+
     seen_overlap = set()
     for i, s in enumerate(sessions):
+        if _is_tpg(s):
+            continue
         for j in range(i + 1, len(sessions)):
             o = sessions[j]
+            if _is_tpg(o):
+                continue
             if s.get("date") != o.get("date"):
                 continue
             if not (s.get("heure_debut") and s.get("heure_fin") and o.get("heure_debut") and o.get("heure_fin")):
@@ -2065,10 +2074,13 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
                         continue
                     seen_overlap.add(key)
                     f = formateurs.get(fid, {})
+                    # Build a detailed message that names the 2 conflicting sessions
+                    s_label = f"{s.get('intitule') or act_types_map.get(s.get('type_activite_id'),{}).get('nom','?')} ({s.get('heure_debut')}-{s.get('heure_fin')})"
+                    o_label = f"{o.get('intitule') or act_types_map.get(o.get('type_activite_id'),{}).get('nom','?')} ({o.get('heure_debut')}-{o.get('heure_fin')})"
                     alerts.append({
                         "type": "warning", "category": "chevauchement",
                         "title": "Chevauchement formateur",
-                        "message": f"{f.get('prenom','?')} {f.get('nom','?')} a deux séances qui se chevauchent.",
+                        "message": f"{f.get('prenom','?')} {f.get('nom','?')} : « {s_label} » et « {o_label} » se chevauchent.",
                         "context": promo_label(s.get("promotion_id")),
                         "session_id": s.get("id"), "date": s.get("date"),
                         "heure_debut": min(s.get("heure_debut"), o.get("heure_debut")),
