@@ -173,14 +173,6 @@ export default function Login() {
             )}
           </div>
         </div>
-
-        {/* Comptes démo */}
-        {!showRequest && (
-          <div className="text-[11px] text-slate-400 leading-relaxed animate-fadeIn" style={{ animationDelay: '300ms' }}>
-            <p className="font-semibold text-slate-500 mb-1">Comptes de démonstration disponibles :</p>
-            <p><span className="font-mono">admin@ifsi.fr</span> · <span className="font-mono">Admin123!</span></p>
-          </div>
-        )}
       </div>
 
       {/* RIGHT — image bâtiment IFPS */}
