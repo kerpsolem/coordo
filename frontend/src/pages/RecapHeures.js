@@ -33,7 +33,9 @@ export default function RecapHeures() {
   const [schoolYears, setSchoolYears] = useState([]);
   const [view, setView] = useState('formateur');
   const [ueData, setUeData] = useState(null);
+  const [groupeData, setGroupeData] = useState(null);
   const [expandedUe, setExpandedUe] = useState({});
+  const [expandedGroupe, setExpandedGroupe] = useState({});
 
   useEffect(() => {
     const today = new Date();
@@ -65,9 +67,10 @@ export default function RecapHeures() {
       const params2 = { date_debut: dd, date_fin: df };
       if (filterPromo !== 'all') params2.promotion_id = filterPromo;
       if (filterSemestre !== 'all') params2.semestre = filterSemestre;
-      const [recRes, fmRes, prRes, atRes, syRes, ueRes] = await Promise.all([
+      const [recRes, fmRes, prRes, atRes, syRes, ueRes, grpRes] = await Promise.all([
         API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types'), API.get('/school-years'),
-        API.get('/recap-ue', { params: params2 })
+        API.get('/recap-ue', { params: params2 }),
+        API.get('/recap-groupe', { params: params2 })
       ]);
       setData(recRes.data);
       setFormateurs(fmRes.data);
@@ -75,6 +78,7 @@ export default function RecapHeures() {
       setActTypes(atRes.data);
       setSchoolYears(syRes.data);
       setUeData(ueRes.data);
+      setGroupeData(grpRes.data);
       // Default to current school year on first load
       if (filterAnneeSco === 'all' && syRes.data?.length) {
         const today = new Date().toISOString().slice(0, 10);
@@ -200,6 +204,7 @@ export default function RecapHeures() {
           <TabsTrigger value="semaine">Par semaine</TabsTrigger>
           <TabsTrigger value="semestre">Par semestre</TabsTrigger>
           <TabsTrigger value="ue" data-testid="recap-ue-tab">Par UE</TabsTrigger>
+          <TabsTrigger value="groupe" data-testid="recap-groupe-tab">Par groupe</TabsTrigger>
           <TabsTrigger value="graphiques" data-testid="tab-graphiques"><BarChart3 size={14} className="mr-1" />Graphiques</TabsTrigger>
         </TabsList>
 
@@ -363,7 +368,96 @@ export default function RecapHeures() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="graphiques" data-testid="graphiques-content">
+        <TabsContent value="groupe" data-testid="recap-groupe-content">
+          <Card>
+            <CardContent className="p-0">
+              {(() => {
+                const allTypes = new Set();
+                (groupeData?.rows || []).forEach(r => r.ues.forEach(u => Object.keys(u.par_type || {}).forEach(t => allTypes.add(t))));
+                const ORDER = ['CM', 'CMO', 'TD', 'TP', 'TPG', 'EVAL', 'TA', 'SI', 'SIMU'];
+                const typeCols = [...allTypes].sort((a, b) => {
+                  const ia = ORDER.indexOf(a); const ib = ORDER.indexOf(b);
+                  if (ia === -1 && ib === -1) return a.localeCompare(b);
+                  if (ia === -1) return 1;
+                  if (ib === -1) return -1;
+                  return ia - ib;
+                });
+                return (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Promotion</TableHead>
+                        <TableHead className="text-xs">Groupe</TableHead>
+                        <TableHead className="text-xs text-right">Total</TableHead>
+                        <TableHead className="text-xs text-right text-amber-700">TA</TableHead>
+                        <TableHead className="text-xs text-right text-violet-700">SIMU</TableHead>
+                        <TableHead className="text-xs text-right">Nb UE</TableHead>
+                        <TableHead className="text-xs"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(groupeData?.rows || []).map((r, i) => {
+                        const key = `${r.promotion_id || 'na'}-${r.groupe}`;
+                        const open = expandedGroupe[key];
+                        return (
+                          <>
+                            <TableRow key={key} className="text-sm hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
+                              onClick={() => setExpandedGroupe(p => ({ ...p, [key]: !p[key] }))}
+                              data-testid={`row-groupe-${i}`}>
+                              <TableCell className="font-semibold">{r.promotion_nom?.replace('Promotion ', '') || '—'}</TableCell>
+                              <TableCell><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#0E1F36] text-white text-xs font-bold">G{r.groupe}</span></TableCell>
+                              <TableCell className="text-right font-bold">{r.total.toFixed(1)}h</TableCell>
+                              <TableCell className="text-right font-semibold text-amber-700">{r.total_ta.toFixed(1)}h</TableCell>
+                              <TableCell className="text-right font-semibold text-violet-700">{r.total_simu.toFixed(1)}h</TableCell>
+                              <TableCell className="text-right">{r.ues.length}</TableCell>
+                              <TableCell className="text-right text-xs text-slate-400">{open ? '▾' : '▸'}</TableCell>
+                            </TableRow>
+                            {open && (
+                              <TableRow className="bg-slate-50/60 dark:bg-slate-900/30">
+                                <TableCell colSpan={7}>
+                                  <div className="py-2 overflow-x-auto">
+                                    <table className="w-full text-[11px]">
+                                      <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                        <tr>
+                                          <th className="text-left px-2 py-1.5 font-semibold">UE</th>
+                                          <th className="text-left">Sem.</th>
+                                          {typeCols.map(t => <th key={t} className="text-right px-1.5 font-semibold">{t}</th>)}
+                                          <th className="text-right px-1.5 text-amber-700 font-bold">TA</th>
+                                          <th className="text-right px-1.5 text-violet-700 font-bold">SIMU</th>
+                                          <th className="text-right px-1.5 font-bold">Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {r.ues.map(u => (
+                                          <tr key={u.ue_id} className="border-t border-slate-100 dark:border-slate-800">
+                                            <td className="px-2 py-1"><span className="font-mono mr-1.5 text-slate-700 dark:text-slate-300">{u.ue_code}</span>{u.ue_intitule}</td>
+                                            <td className="text-slate-500">{u.semestre || '—'}</td>
+                                            {typeCols.map(t => <td key={t} className="text-right">{(u.par_type?.[t] || 0).toFixed(1)}</td>)}
+                                            <td className="text-right font-semibold text-amber-700">{u.ta.toFixed(1)}</td>
+                                            <td className="text-right font-semibold text-violet-700">{u.simu.toFixed(1)}</td>
+                                            <td className="text-right font-bold">{u.total.toFixed(1)}h</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        );
+                      })}
+                      {(!groupeData?.rows || groupeData.rows.length === 0) && (
+                        <TableRow><TableCell colSpan={7} className="text-center text-sm text-slate-500 py-6">Aucune donnée sur cette période</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+          <TabsContent value="graphiques" data-testid="graphiques-content">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par formateur (top 12)</CardTitle></CardHeader>

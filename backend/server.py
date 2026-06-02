@@ -1794,6 +1794,176 @@ def _nb_groupes_from_taille(taille: str) -> int:
         return 4
     return 1
 
+
+def _group_label_to_student_indices(label: str):
+    """Map a group label to the list of student-group indices (1..8) that it covers.
+    Examples:
+      '1a','1b' -> [1]  (both halves are still student #1)
+      '1','Groupe 1' -> [1]
+      '1/2 promo' -> [] (handled at caller via promo entiere)
+    Returns [] if cannot be mapped (caller decides fallback).
+    """
+    if not label:
+        return []
+    s = str(label).strip().lower()
+    # Letter suffix like '1a', '3b' -> the leading digit
+    import re as _re
+    m = _re.match(r"^(\d{1,2})[a-z]?$", s)
+    if m:
+        n = int(m.group(1))
+        return [n] if 1 <= n <= 8 else []
+    # 'Groupe N'
+    m = _re.match(r"^groupe\s+(\d{1,2})", s)
+    if m:
+        n = int(m.group(1))
+        return [n] if 1 <= n <= 8 else []
+    return []
+
+
+@api_router.get("/recap-groupe")
+async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[str] = None,
+                       date_debut: Optional[str] = None, date_fin: Optional[str] = None):
+    """Détail par groupe (point de vue étudiant) :
+    Pour chaque promotion, pour chaque groupe (1..8), pour chaque UE,
+    cumule les heures par type de cours en tenant compte du fait qu'un étudiant
+    assiste à UNE seule séance parmi les séances parallèles (même date+heure+intitulé).
+    """
+    q = {}
+    if date_debut and date_fin:
+        q["date"] = {"$gte": date_debut, "$lte": date_fin}
+    if semestre:
+        if semestre == "pair":
+            q["semestre"] = {"$in": ["S2", "S4", "S6"]}
+        elif semestre == "impair":
+            q["semestre"] = {"$in": ["S1", "S3", "S5"]}
+        else:
+            q["semestre"] = semestre
+    if promotion_id:
+        q["promotion_id"] = promotion_id
+
+    sessions = await db.sessions.find(q, {"_id": 0}).to_list(5000)
+    ues_list = await crud_list("ues")
+    ues_map = {u["id"]: u for u in ues_list}
+    act_types = {a["id"]: a for a in await crud_list("activity_types")}
+    promotions_list = await crud_list("promotions")
+    promos_map = {p["id"]: p for p in promotions_list}
+    groups_list = await crud_list("groups")
+    groups_map = {g["id"]: g for g in groups_list}
+
+    def _ta_simu(act_type_name, description):
+        n = (act_type_name or "").strip().upper()
+        d = (description or "").lower()
+        is_ta = (n == "TA") or ("appropriation" in d)
+        is_simu = (n in ("SI", "SIMU", "SIMULATION")) or ("simulation" in d)
+        return is_ta, is_simu
+
+    # Aggregator: rows[(promo_id, groupe_index)] -> {ue_id -> {par_type:{}, ta, simu, total}}
+    rows = {}
+
+    def _ensure(promo_id, groupe_idx):
+        if (promo_id, groupe_idx) not in rows:
+            promo = promos_map.get(promo_id, {})
+            rows[(promo_id, groupe_idx)] = {
+                "promotion_id": promo_id,
+                "promotion_nom": promo.get("nom", "?"),
+                "groupe": groupe_idx,  # 1..8
+                "ues": {},
+                "total": 0,
+                "total_ta": 0,
+                "total_simu": 0,
+            }
+        return rows[(promo_id, groupe_idx)]
+
+    def _ensure_ue(bucket, ue_id):
+        if ue_id not in bucket["ues"]:
+            ue = ues_map.get(ue_id, {})
+            bucket["ues"][ue_id] = {
+                "ue_id": ue_id,
+                "ue_code": ue.get("code_ue", "?"),
+                "ue_intitule": ue.get("intitule", "?"),
+                "semestre": ue.get("semestre", ""),
+                "par_type": {},
+                "ta": 0,
+                "simu": 0,
+                "total": 0,
+            }
+        return bucket["ues"][ue_id]
+
+    # Group sessions by (date, heure_debut, intitule, type) to dedupe parallel groups
+    # A student attends only ONE of the parallel sessions
+    seen_keys_per_student = {}  # (promo_id, groupe_idx) -> set of dedup_keys
+
+    # Sort sessions for deterministic processing
+    sessions.sort(key=lambda s: (s.get("date") or "", s.get("heure_debut") or ""))
+
+    for s in sessions:
+        promo_id = s.get("promotion_id") or ""
+        if not promo_id:
+            continue
+        ue_id = s.get("ue_id") or ""
+        if not ue_id:
+            continue
+        dur = float(s.get("duree", 0) or 0)
+        if dur <= 0:
+            continue
+        at = act_types.get(s.get("type_activite_id"), {})
+        tname = (at.get("nom") or "?").upper()
+        is_ta, is_simu = _ta_simu(at.get("nom"), at.get("description"))
+
+        # Determine which student-groups (1..8) this session concerns
+        gids = s.get("group_ids") or ([s["group_id"]] if s.get("group_id") else [])
+        student_indices = set()
+        if not gids:
+            student_indices = set(range(1, 9))  # promo entière => all 8
+        else:
+            for gid in gids:
+                g = groups_map.get(gid, {})
+                lbl = g.get("libelle", "")
+                idxs = _group_label_to_student_indices(lbl)
+                if idxs:
+                    for i in idxs:
+                        student_indices.add(i)
+                else:
+                    # Fallback for special labels like '1/2 promo', '1/4 promo', "Groupe suivi Ped'"
+                    lbl_l = lbl.lower()
+                    if "1/2" in lbl_l or "demi" in lbl_l:
+                        student_indices.update(range(1, 9))
+                    elif "1/4" in lbl_l:
+                        student_indices.update(range(1, 9))
+                    elif "promo entière" in lbl_l or "promo entiere" in lbl_l:
+                        student_indices.update(range(1, 9))
+        if not student_indices:
+            continue
+
+        # Dedup key for parallel sessions (student attends only one)
+        dedup_key = f"{s.get('date','')}|{s.get('heure_debut','')}|{(s.get('intitule') or '').lower().strip()}|{tname}"
+
+        for idx in student_indices:
+            seen = seen_keys_per_student.setdefault((promo_id, idx), set())
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            bucket = _ensure(promo_id, idx)
+            ue_bucket = _ensure_ue(bucket, ue_id)
+            ue_bucket["par_type"][tname] = ue_bucket["par_type"].get(tname, 0) + dur
+            ue_bucket["total"] += dur
+            bucket["total"] += dur
+            if is_ta:
+                ue_bucket["ta"] += dur
+                bucket["total_ta"] += dur
+            if is_simu:
+                ue_bucket["simu"] += dur
+                bucket["total_simu"] += dur
+
+    # Convert to sortable list
+    result = []
+    for (_pid, _g), b in rows.items():
+        # Convert nested 'ues' dict to a sorted list by ue_code
+        b["ues"] = sorted(b["ues"].values(), key=lambda x: (x["semestre"] or "z", x["ue_code"]))
+        result.append(b)
+    result.sort(key=lambda x: (x["promotion_nom"], x["groupe"]))
+    return {"rows": result}
+
 @api_router.get("/recap-ue")
 async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] = None,
                    date_debut: Optional[str] = None, date_fin: Optional[str] = None):
