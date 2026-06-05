@@ -1936,7 +1936,12 @@ async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[st
             continue
 
         # Dedup key for parallel sessions (student attends only one)
-        dedup_key = f"{s.get('date','')}|{s.get('heure_debut','')}|{(s.get('intitule') or '').lower().strip()}|{tname}"
+        # Pour SIMU (1/32), on dedup uniquement sur (date, plage horaire) sans tenir compte de l'intitulé :
+        # le groupe a parfois plusieurs sous-groupes SIMU en parallèle = un seul créneau pour l'étudiant
+        if is_simu:
+            dedup_key = f"SIMU|{s.get('date','')}|{s.get('heure_debut','')}|{s.get('heure_fin','')}"
+        else:
+            dedup_key = f"{s.get('date','')}|{s.get('heure_debut','')}|{(s.get('intitule') or '').lower().strip()}|{tname}"
 
         for idx in student_indices:
             seen = seen_keys_per_student.setdefault((promo_id, idx), set())

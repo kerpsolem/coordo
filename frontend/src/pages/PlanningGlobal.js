@@ -596,6 +596,13 @@ export default function PlanningGlobal() {
       const n = (at.nom || '').toLowerCase().trim();
       return n === 'ta' || (at.description || '').toLowerCase().includes('appropriation');
     };
+    // Identify SIMU (simulation) activity type
+    const isSimuType = (typeId) => {
+      const at = atMap[typeId];
+      if (!at) return false;
+      const n = (at.nom || '').toLowerCase().trim();
+      return n === 'si' || n === 'simu' || n === 'simulation' || (at.description || '').toLowerCase().includes('simulation');
+    };
     // For each group 1..8, compute total hours from a student's POV
     const result = [];
     for (let g = 1; g <= 8; g++) {
@@ -612,12 +619,16 @@ export default function PlanningGlobal() {
         }
         return lanes.has(laneA) || lanes.has(laneB);
       });
-      // Deduplicate "TD with identical intitule + date + heure_debut" : student attends only ONE parallel group
-      // Key sessions by (date, heure_debut, intitule.toLowerCase().trim(), type_activite_id)
+      // Deduplicate parallel sessions:
+      // - SIMU (1/32) : on dedup sur (date, heure_debut, heure_fin) car plusieurs sous-groupes SIMU en parallèle = 1 seul créneau étudiant
+      // - Autres : dedup classique (date, heure_debut, intitule, type)
       const seenKeys = new Set();
       let total = 0, totalTA = 0;
       for (const s of studentSessions) {
-        const key = `${s.date}|${s.heure_debut}|${(s.intitule || '').toLowerCase().trim()}|${s.type_activite_id || ''}`;
+        const isSimu = isSimuType(s.type_activite_id);
+        const key = isSimu
+          ? `SIMU|${s.date}|${s.heure_debut}|${s.heure_fin}`
+          : `${s.date}|${s.heure_debut}|${(s.intitule || '').toLowerCase().trim()}|${s.type_activite_id || ''}`;
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);
         const dur = parseFloat(s.duree) || ((timeToMin(s.heure_fin || '00:00') - timeToMin(s.heure_debut || '00:00')) / 60);
