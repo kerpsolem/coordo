@@ -1936,11 +1936,26 @@ async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[st
         if not student_indices:
             continue
 
+        # Determine if this session uses letter-suffix sub-groups (1/16 pattern: 1a, 1b, 5a, 5b...)
+        # When so, a same activity (same intitulé+type+date) split between e.g. 5a@slot1 and 5b@slot2
+        # represents ONE attendance for student #5 (half goes to slot1, the other half to slot2)
+        import re as _re2
+        has_letter_subgroup = False
+        for gid in gids:
+            g = groups_map.get(gid, {})
+            lbl_g = (g.get("libelle", "") or "").strip().lower()
+            if _re2.fullmatch(r"\d+[a-z]", lbl_g):
+                has_letter_subgroup = True
+                break
+
         # Dedup key for parallel sessions (student attends only one)
         # Pour SIMU (1/32), on dedup uniquement sur (date, plage horaire) sans tenir compte de l'intitulé :
         # le groupe a parfois plusieurs sous-groupes SIMU en parallèle = un seul créneau pour l'étudiant
+        # Pour les sous-groupes lettrés (1/16), même intitulé+type+date suffit (5a et 5b sont 2 moitiés du même student #5)
         if is_simu:
             dedup_key = f"SIMU|{s.get('date','')}|{s.get('heure_debut','')}|{s.get('heure_fin','')}"
+        elif has_letter_subgroup:
+            dedup_key = f"SUB|{s.get('date','')}|{(s.get('intitule') or '').lower().strip()}|{tname}"
         else:
             dedup_key = f"{s.get('date','')}|{s.get('heure_debut','')}|{(s.get('intitule') or '').lower().strip()}|{tname}"
 

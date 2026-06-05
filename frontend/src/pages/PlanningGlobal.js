@@ -625,14 +625,26 @@ export default function PlanningGlobal() {
       });
       // Deduplicate parallel sessions:
       // - SIMU (1/32) : on dedup sur (date, heure_debut, heure_fin) car plusieurs sous-groupes SIMU en parallèle = 1 seul créneau étudiant
+      // - Sous-groupes lettrés (1/16, ex: 5a/5b) : dedup sur (date, intitulé, type) pour ne pas compter 2 fois une même activité scindée sur 2 créneaux
       // - Autres : dedup classique (date, heure_debut, intitule, type)
+      const LETTER_SUB = /^\d+[a-z]$/i;
       const seenKeys = new Set();
       let total = 0, totalTA = 0;
       for (const s of studentSessions) {
         const isSimu = isSimuType(s.type_activite_id);
-        const key = isSimu
-          ? `SIMU|${s.date}|${s.heure_debut}|${s.heure_fin}`
-          : `${s.date}|${s.heure_debut}|${(s.intitule || '').toLowerCase().trim()}|${s.type_activite_id || ''}`;
+        const sgids = s.group_ids || (s.group_id ? [s.group_id] : []);
+        const hasLetterSub = sgids.some(gid => {
+          const grp = groups.find(x => x.id === gid);
+          return grp && LETTER_SUB.test((grp.libelle || '').trim());
+        });
+        let key;
+        if (isSimu) {
+          key = `SIMU|${s.date}|${s.heure_debut}|${s.heure_fin}`;
+        } else if (hasLetterSub) {
+          key = `SUB|${s.date}|${(s.intitule || '').toLowerCase().trim()}|${s.type_activite_id || ''}`;
+        } else {
+          key = `${s.date}|${s.heure_debut}|${(s.intitule || '').toLowerCase().trim()}|${s.type_activite_id || ''}`;
+        }
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);
         const dur = parseFloat(s.duree) || ((timeToMin(s.heure_fin || '00:00') - timeToMin(s.heure_debut || '00:00')) / 60);
