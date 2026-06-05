@@ -1886,6 +1886,7 @@ async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[st
                 "ta": 0,
                 "simu": 0,
                 "total": 0,
+                "sessions": [],
             }
         return bucket["ues"][ue_id]
 
@@ -1952,6 +1953,17 @@ async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[st
             ue_bucket = _ensure_ue(bucket, ue_id)
             ue_bucket["par_type"][tname] = ue_bucket["par_type"].get(tname, 0) + dur
             ue_bucket["total"] += dur
+            ue_bucket["sessions"].append({
+                "id": s.get("id"),
+                "date": s.get("date"),
+                "heure_debut": s.get("heure_debut"),
+                "heure_fin": s.get("heure_fin"),
+                "intitule": s.get("intitule") or "",
+                "type": tname,
+                "heures": dur,
+                "ta": is_ta,
+                "simu": is_simu,
+            })
             bucket["total"] += dur
             if is_ta:
                 ue_bucket["ta"] += dur
@@ -1964,6 +1976,8 @@ async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[st
     result = []
     for (_pid, _g), b in rows.items():
         # Convert nested 'ues' dict to a sorted list by ue_code
+        for ue_b in b["ues"].values():
+            ue_b["sessions"].sort(key=lambda x: (x.get("date") or "", x.get("heure_debut") or ""))
         b["ues"] = sorted(b["ues"].values(), key=lambda x: (x["semestre"] or "z", x["ue_code"]))
         result.append(b)
     result.sort(key=lambda x: (x["promotion_nom"], x["groupe"]))
