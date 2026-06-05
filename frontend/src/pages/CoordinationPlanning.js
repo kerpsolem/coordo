@@ -84,7 +84,7 @@ export default function CoordinationPlanning() {
   const siteMap = getMap(sites);
 
   const startEdit = (s) => {
-    setEditSession({ ...s, formateur_ids: s.formateur_ids || [] });
+    setEditSession({ ...s, formateur_ids: s.formateur_ids || [], joker_formateur_ids: s.joker_formateur_ids || [] });
     setShowDialog(true);
   };
 
@@ -473,20 +473,38 @@ export default function CoordinationPlanning() {
                 </Select>
               </div>
               <div className="col-span-2">
-                <Label>Formateurs</Label>
+                <Label>Formateurs <span className="text-[10px] text-slate-500 font-normal ml-2">Clic : ✓ sélection · clic 2 : ★ joker · clic 3 : retirer</span></Label>
                 <div className="flex flex-wrap gap-2 mt-1">
-                  {formateurs.map(f => (
-                    <label key={f.id} className={`flex items-center gap-1 px-2 py-1 rounded border text-xs cursor-pointer
-                      ${(editSession.formateur_ids || []).includes(f.id) ? 'bg-slate-200 dark:bg-slate-700 border-slate-400' : 'border-slate-200 dark:border-slate-700'}`}>
-                      <input type="checkbox" className="w-3 h-3"
-                        checked={(editSession.formateur_ids || []).includes(f.id)}
-                        onChange={e => {
-                          const ids = editSession.formateur_ids || [];
-                          setEditSession({ ...editSession, formateur_ids: e.target.checked ? [...ids, f.id] : ids.filter(i => i !== f.id) });
-                        }} />
-                      {f.initiales} - {f.prenom} {f.nom}
-                    </label>
-                  ))}
+                  {formateurs.map(f => {
+                    const ids = editSession.formateur_ids || [];
+                    const jokers = editSession.joker_formateur_ids || [];
+                    const isSel = ids.includes(f.id);
+                    const isJoker = jokers.includes(f.id);
+                    const cycle = () => {
+                      if (!isSel) {
+                        setEditSession({ ...editSession, formateur_ids: [...ids, f.id], joker_formateur_ids: jokers.filter(i => i !== f.id) });
+                      } else if (!isJoker) {
+                        setEditSession({ ...editSession, formateur_ids: ids, joker_formateur_ids: [...jokers, f.id] });
+                      } else {
+                        setEditSession({ ...editSession, formateur_ids: ids.filter(i => i !== f.id), joker_formateur_ids: jokers.filter(i => i !== f.id) });
+                      }
+                    };
+                    const cls = isJoker
+                      ? 'bg-amber-200 dark:bg-amber-700/50 border-amber-500 text-amber-900 dark:text-amber-100 font-semibold'
+                      : isSel
+                        ? 'bg-slate-200 dark:bg-slate-700 border-slate-400'
+                        : 'border-slate-200 dark:border-slate-700';
+                    return (
+                      <button key={f.id} type="button" onClick={cycle}
+                        title={isJoker ? 'Joker (remplaçant/secours)' : isSel ? 'Sélectionné' : 'Non sélectionné'}
+                        className={`flex items-center gap-1 px-2 py-1 rounded border text-xs cursor-pointer ${cls}`}
+                        data-testid={`formateur-toggle-coord-${f.id}`}>
+                        {isJoker && <span className="text-amber-700 dark:text-amber-300">★</span>}
+                        {!isJoker && isSel && <span className="text-slate-500">✓</span>}
+                        {f.initiales} - {f.prenom} {f.nom}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="col-span-2">

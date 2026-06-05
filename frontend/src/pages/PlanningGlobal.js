@@ -190,7 +190,7 @@ export default function PlanningGlobal() {
     apres_midi: { bg: 'bg-sky-100 dark:bg-sky-900/40', text: 'text-sky-700 dark:text-sky-300', label: 'PM' },
   };
 
-  const startEdit = (s) => { setHoveredSession(null); setEditSession({ ...s, formateur_ids: s.formateur_ids || [] }); setShowDialog(true); };
+  const startEdit = (s) => { setHoveredSession(null); setEditSession({ ...s, formateur_ids: s.formateur_ids || [], joker_formateur_ids: s.joker_formateur_ids || [] }); setShowDialog(true); };
   const startNew = (dayStr, hour) => {
     setHoveredSession(null);
     if (dayStr && holidayMap[dayStr]) {
@@ -198,7 +198,7 @@ export default function PlanningGlobal() {
     }
     const hEnd = hour ? `${String(Math.min(parseInt(hour.split(':')[0]) + 2, 18)).padStart(2, '0')}:${hour.split(':')[1]}` : '10:00';
     setEditSession({ date: dayStr, date_fin_periode: '', heure_debut: hour || '08:00', heure_fin: hEnd, journee_entiere: false, type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
-      group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: '' });
+      group_id: '', ue_id: '', semestre: '', formateur_ids: [], joker_formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: '' });
     setShowDialog(true);
   };
   const saveSession = async () => {
@@ -393,7 +393,7 @@ export default function PlanningGlobal() {
         setEditSession({
           date: createDrag.dayStr, heure_debut: createPreview.startTime, heure_fin: createPreview.endTime,
           type_activite_id: '', promotion_id: selectedPromos.size === 1 ? [...selectedPromos][0] : '',
-          group_id: '', ue_id: '', semestre: '', formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: ''
+          group_id: '', ue_id: '', semestre: '', formateur_ids: [], joker_formateur_ids: [], site_id: '', statut: 'Prevu', saisi: false, commentaire: '', intitule: ''
         });
         setShowDialog(true);
       }
@@ -541,12 +541,16 @@ export default function PlanningGlobal() {
         {/* Formateurs en colonne */}
         {forms.length > 0 && (
           <div className="space-y-1.5 mb-3">
-            {forms.map((f, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold flex-shrink-0">{f.initiales}</span>
-                <span className="text-sm text-slate-800 dark:text-slate-100">{f.prenom} {f.nom?.toUpperCase()}</span>
-              </div>
-            ))}
+            {forms.map((f, i) => {
+              const isJoker = (s.joker_formateur_ids || []).includes(f.id);
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold flex-shrink-0 ${isJoker ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 ring-2 ring-amber-400' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'}`}>{f.initiales}</span>
+                  <span className="text-sm text-slate-800 dark:text-slate-100">{f.prenom} {f.nom?.toUpperCase()}</span>
+                  {isJoker && <span className="text-amber-600 dark:text-amber-300 text-xs font-semibold" title="Formateur joker / remplaçant">★ joker</span>}
+                </div>
+              );
+            })}
           </div>
         )}
         {/* Promotion */}
@@ -1284,17 +1288,45 @@ export default function PlanningGlobal() {
                       const allIds = formateurs.map(f => f.id);
                       const cur = editSession.formateur_ids || [];
                       const same = cur.length === allIds.length && cur.every(id => allIds.includes(id));
-                      setEditSession({ ...editSession, formateur_ids: same ? [] : allIds });
+                      setEditSession({ ...editSession, formateur_ids: same ? [] : allIds, joker_formateur_ids: same ? [] : (editSession.joker_formateur_ids || []) });
                     }}
                     data-testid="select-all-formateurs">
                     {((editSession.formateur_ids||[]).length === formateurs.length && formateurs.length>0) ? 'Tout deselectionner' : 'Tous les formateurs'}
                   </button>
-                  {formateurs.map(f=>(
-                  <label key={f.id} className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer
-                    ${(editSession.formateur_ids||[]).includes(f.id)?'bg-slate-200 dark:bg-slate-700 border-slate-400':'border-slate-200 dark:border-slate-700'}`}>
-                    <input type="checkbox" className="w-3 h-3" checked={(editSession.formateur_ids||[]).includes(f.id)}
-                      onChange={e=>{const ids=editSession.formateur_ids||[];setEditSession({...editSession,formateur_ids:e.target.checked?[...ids,f.id]:ids.filter(i=>i!==f.id)});}}/>
-                    {f.initiales} - {f.prenom} {f.nom}</label>))}
+                  <span className="text-[10px] text-slate-500 ml-2">Clic : ✓ sélection · clic 2 : ★ joker · clic 3 : retirer</span>
+                  {formateurs.map(f=>{
+                    const ids = editSession.formateur_ids || [];
+                    const jokers = editSession.joker_formateur_ids || [];
+                    const isSel = ids.includes(f.id);
+                    const isJoker = jokers.includes(f.id);
+                    const cycle = () => {
+                      if (!isSel) {
+                        // 0 -> 1 (selected)
+                        setEditSession({ ...editSession, formateur_ids: [...ids, f.id], joker_formateur_ids: jokers.filter(i => i !== f.id) });
+                      } else if (!isJoker) {
+                        // 1 -> 2 (joker)
+                        setEditSession({ ...editSession, formateur_ids: ids, joker_formateur_ids: [...jokers, f.id] });
+                      } else {
+                        // 2 -> 0 (deselect)
+                        setEditSession({ ...editSession, formateur_ids: ids.filter(i => i !== f.id), joker_formateur_ids: jokers.filter(i => i !== f.id) });
+                      }
+                    };
+                    const cls = isJoker
+                      ? 'bg-amber-200 dark:bg-amber-700/50 border-amber-500 text-amber-900 dark:text-amber-100 font-semibold'
+                      : isSel
+                        ? 'bg-slate-200 dark:bg-slate-700 border-slate-400'
+                        : 'border-slate-200 dark:border-slate-700';
+                    return (
+                      <button key={f.id} type="button" onClick={cycle}
+                        title={isJoker ? 'Joker (remplaçant/secours)' : isSel ? 'Sélectionné' : 'Non sélectionné'}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer ${cls}`}
+                        data-testid={`formateur-toggle-${f.id}`}>
+                        {isJoker && <span className="text-amber-700 dark:text-amber-300">★</span>}
+                        {!isJoker && isSel && <span className="text-slate-500">✓</span>}
+                        {f.initiales} - {f.prenom} {f.nom}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="col-span-2 flex items-center gap-4">
