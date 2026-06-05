@@ -402,7 +402,11 @@ export default function RecapHeures() {
                         return (
                           <>
                             <TableRow key={key} className="text-sm hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
-                              onClick={() => setExpandedGroupe(p => ({ ...p, [key]: !p[key] }))}
+                              onClick={(e) => {
+                                // Ignore clicks coming from inner detail tables to avoid accidental collapse
+                                if (e.target.closest && e.target.closest('table table')) return;
+                                setExpandedGroupe(p => ({ ...p, [key]: !p[key] }));
+                              }}
                               data-testid={`row-groupe-${i}`}>
                               <TableCell className="font-semibold">{r.promotion_nom?.replace('Promotion ', '') || '—'}</TableCell>
                               <TableCell><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#0E1F36] text-white text-xs font-bold">G{r.groupe}</span></TableCell>
@@ -434,7 +438,8 @@ export default function RecapHeures() {
                                           return (
                                             <React.Fragment key={u.ue_id}>
                                               <tr className="border-t border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-white dark:hover:bg-slate-800/40"
-                                                onClick={() => setExpandedGroupe(p => ({ ...p, [`ue-${ueKey}`]: !p[`ue-${ueKey}`] }))}
+                                                onClick={(e) => { e.stopPropagation(); setExpandedGroupe(p => ({ ...p, [`ue-${ueKey}`]: !p[`ue-${ueKey}`] })); }}
+                                                onDoubleClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                                                 data-testid={`row-ue-detail-${ueKey}`}>
                                                 <td className="px-2 py-1">
                                                   <span className="text-[10px] text-slate-400 inline-block w-3">{ueOpen ? '▾' : '▸'}</span>
@@ -448,7 +453,7 @@ export default function RecapHeures() {
                                                 <td className="text-right font-bold">{u.total.toFixed(1)}h</td>
                                               </tr>
                                               {ueOpen && (u.sessions || []).map((sess, si) => (
-                                                <tr key={sess.id || si} className="bg-white/70 dark:bg-slate-900/40 text-[10px] text-slate-600 dark:text-slate-300">
+                                                <tr key={sess.id || si} onClick={(e) => e.stopPropagation()} className="bg-white/70 dark:bg-slate-900/40 text-[10px] text-slate-600 dark:text-slate-300">
                                                   <td className="pl-7 pr-2 py-0.5" colSpan={2}>
                                                     <span className="text-slate-400 mr-2">{sess.date ? new Date(sess.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '—'}</span>
                                                     <span className="font-mono text-slate-500 mr-2">{sess.heure_debut}-{sess.heure_fin}</span>
