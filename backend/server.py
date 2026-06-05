@@ -2590,8 +2590,6 @@ async def startup():
         f.write(f"- Role: super_admin\n\n")
         f.write("## Auth Endpoints\n- POST /api/auth/login\n- POST /api/auth/logout\n- GET /api/auth/me\n")
 
-app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -2599,6 +2597,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
