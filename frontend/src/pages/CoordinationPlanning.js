@@ -82,6 +82,7 @@ export default function CoordinationPlanning() {
   const ueMap = getMap(ues);
   const domMap = getMap(domains);
   const siteMap = getMap(sites);
+  const grpMap = getMap(groups);
 
   const startEdit = (s) => {
     setEditSession({ ...s, formateur_ids: s.formateur_ids || [], joker_formateur_ids: s.joker_formateur_ids || [] });
@@ -337,6 +338,13 @@ export default function CoordinationPlanning() {
                     <span className="flex-1 truncate font-medium">{s.intitule || at?.nom || '—'}</span>
                     {conflict && <span title="Conflit formateur ou groupe" className="text-red-600 font-bold text-[10px]">⚠ Conflit</span>}
                     {s.promotion_id && <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] shrink-0">{promoMap[s.promotion_id]?.nom?.replace('Promotion ', '')}</span>}
+                    {(() => {
+                      const gids = s.group_ids || (s.group_id ? [s.group_id] : []);
+                      if (!gids.length) return <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] shrink-0" title="Promotion entière">Tous</span>;
+                      const labels = gids.map(gid => grpMap[gid]?.libelle).filter(Boolean);
+                      const display = labels.length > 4 ? `${labels.slice(0, 4).join(', ')}…` : labels.join(', ');
+                      return <span className="px-1.5 py-0.5 rounded bg-coral-50 dark:bg-coral-900/30 text-coral-700 dark:text-coral-300 text-[10px] font-medium shrink-0" title={labels.join(', ')} data-testid={`session-groups-${s.id}`}>{display}</span>;
+                    })()}
                     <span className="text-slate-500 truncate w-32 hidden md:block">{ueMap[s.ue_id]?.intitule}</span>
                     <span className="font-bold text-slate-800 dark:text-slate-200 w-20 truncate" title={(s.formateur_ids || []).map(fid => fmMap[fid] && `${fmMap[fid].prenom} ${fmMap[fid].nom}`).filter(Boolean).join(', ')}>
                       {(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).filter(Boolean).join(', ')}
