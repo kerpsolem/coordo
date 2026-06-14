@@ -140,7 +140,7 @@ export default function PlanningFormateur() {
 
       {selectedFormateur && (
         <>
-          {/* Formateur Info */}
+          {/* Formateur Info + KPI cards */}
           {selectedFm && (
             <Card>
               <CardContent className="py-3 flex items-center gap-6">
@@ -162,6 +162,49 @@ export default function PlanningFormateur() {
               </CardContent>
             </Card>
           )}
+
+          {/* KPI cards: Volume global / Volume théorique formateur / Heures assignées / Écart */}
+          {workload && (() => {
+            const myWl = (workload.formateurs || []).find(f => f.formateur_id === selectedFormateur);
+            const ecart = myWl?.ecart ?? 0;
+            const ref = myWl?.reference ?? 0;
+            const heuresAss = myWl?.heures_cours ?? 0;
+            const statut = myWl?.statut ?? 'equilibre';
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="formateur-kpi">
+                <Card className="border-coral-200">
+                  <CardContent className="py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Volume global cours à pourvoir</p>
+                    <p className="text-2xl font-extrabold mt-1" style={{ fontFamily: 'Outfit' }}>{(workload.total_cours_requis ?? 0).toFixed(1)}h</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">heures formateur × nb requis · période</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-blue-200">
+                  <CardContent className="py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Volume théorique du formateur</p>
+                    <p className="text-2xl font-extrabold mt-1 text-blue-700" style={{ fontFamily: 'Outfit' }}>{ref.toFixed(1)}h</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">selon quotité {selectedFm?.quotite || 100}%</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-emerald-200">
+                  <CardContent className="py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Heures réellement assignées (cours)</p>
+                    <p className="text-2xl font-extrabold mt-1 text-emerald-700" style={{ fontFamily: 'Outfit' }}>{heuresAss.toFixed(1)}h</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">cours seuls · hors EVAL/SI/Stage</p>
+                  </CardContent>
+                </Card>
+                <Card className={statut === 'surcharge' ? 'border-red-300 bg-red-50/40 dark:bg-red-900/10' : statut === 'sous-charge' ? 'border-blue-300 bg-blue-50/40 dark:bg-blue-900/10' : 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-900/10'}>
+                  <CardContent className="py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Écart</p>
+                    <p className={`text-2xl font-extrabold mt-1 ${ecart > 0 ? 'text-red-600' : ecart < 0 ? 'text-blue-600' : 'text-emerald-700'}`} style={{ fontFamily: 'Outfit' }}>
+                      {ecart > 0 ? '+' : ''}{ecart.toFixed(1)}h
+                    </p>
+                    <p className={`text-[10px] mt-0.5 capitalize font-semibold ${statut === 'surcharge' ? 'text-red-600' : statut === 'sous-charge' ? 'text-blue-600' : 'text-emerald-700'}`}>{statut}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()}
 
           {/* Hours breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

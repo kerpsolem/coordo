@@ -38,6 +38,7 @@ export default function RecapHeures() {
   const [expandedGroupe, setExpandedGroupe] = useState({});
   const [ues, setUes] = useState([]);
   const [filterUeGroupe, setFilterUeGroupe] = useState('all');
+  const [workload, setWorkload] = useState(null);
 
   useEffect(() => {
     const today = new Date();
@@ -69,11 +70,12 @@ export default function RecapHeures() {
       const params2 = { date_debut: dd, date_fin: df };
       if (filterPromo !== 'all') params2.promotion_id = filterPromo;
       if (filterSemestre !== 'all') params2.semestre = filterSemestre;
-      const [recRes, fmRes, prRes, atRes, syRes, ueRes, grpRes, uesRes] = await Promise.all([
+      const [recRes, fmRes, prRes, atRes, syRes, ueRes, grpRes, uesRes, wlRes] = await Promise.all([
         API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types'), API.get('/school-years'),
         API.get('/recap-ue', { params: params2 }),
         API.get('/recap-groupe', { params: params2 }),
-        API.get('/ues')
+        API.get('/ues'),
+        API.get('/workload', { params: { date_debut: dd, date_fin: df, semestre: filterSemestre !== 'all' ? filterSemestre : undefined, promotion_ids: filterPromo !== 'all' ? filterPromo : undefined } })
       ]);
       setData(recRes.data);
       setFormateurs(fmRes.data);
@@ -83,6 +85,7 @@ export default function RecapHeures() {
       setUeData(ueRes.data);
       setGroupeData(grpRes.data);
       setUes(uesRes.data);
+      setWorkload(wlRes.data);
       // Default to current school year on first load
       if (filterAnneeSco === 'all' && syRes.data?.length) {
         const today = new Date().toISOString().slice(0, 10);
@@ -194,9 +197,21 @@ export default function RecapHeures() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card><CardContent className="py-3"><p className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>{data?.total_heures?.toFixed(1) || 0}h</p><p className="text-xs text-slate-500">Total heures</p></CardContent></Card>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card><CardContent className="py-3"><p className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>{data?.total_heures?.toFixed(1) || 0}h</p><p className="text-xs text-slate-500">Total heures assignées</p></CardContent></Card>
         <Card><CardContent className="py-3"><p className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>{data?.total_seances || 0}</p><p className="text-xs text-slate-500">Total seances</p></CardContent></Card>
+        <Card className="border-coral-200" data-testid="kpi-cours-requis"><CardContent className="py-3">
+          <p className="text-2xl font-bold text-coral-700" style={{ fontFamily: 'Outfit' }}>{workload?.total_cours_requis?.toFixed(1) || '0'}h</p>
+          <p className="text-xs text-slate-500">Volume cours à pourvoir <span className="text-[10px]">(durée × nb requis)</span></p>
+        </CardContent></Card>
+        <Card className="border-blue-200" data-testid="kpi-cours-assignees"><CardContent className="py-3">
+          <p className="text-2xl font-bold text-blue-700" style={{ fontFamily: 'Outfit' }}>{workload?.total_cours_assignees?.toFixed(1) || '0'}h</p>
+          <p className="text-xs text-slate-500">Heures cours assignées <span className="text-[10px]">(durée × formateurs réels)</span></p>
+        </CardContent></Card>
+        <Card className={workload?.heures_a_pourvoir > 0 ? 'border-red-300 bg-red-50/30' : 'border-emerald-200'} data-testid="kpi-a-pourvoir"><CardContent className="py-3">
+          <p className={`text-2xl font-bold ${workload?.heures_a_pourvoir > 0 ? 'text-red-600' : 'text-emerald-700'}`} style={{ fontFamily: 'Outfit' }}>{workload?.heures_a_pourvoir?.toFixed(1) || '0'}h</p>
+          <p className="text-xs text-slate-500">Heures à pourvoir <span className="text-[10px]">(reste à assigner)</span></p>
+        </CardContent></Card>
       </div>
 
       {/* Views */}

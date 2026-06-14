@@ -337,6 +337,22 @@ async def list_sessions(request: Request, promotion_id: Optional[str] = None, fo
         q["annee_scolaire_id"] = annee_scolaire_id
     return await crud_list("sessions", q, sort=[("date", 1), ("heure_debut", 1)])
 
+async def _default_nb_form_requis(type_activite_id: Optional[str]) -> int:
+    """Default required number of trainers based on activity type.
+    - TPG = 0 (autonomous group work, no trainer present)
+    - is_cours=True (TD/TP/CM/CMo/etc.) = 1
+    - Others = 0
+    """
+    if not type_activite_id:
+        return 0
+    at = await db.activity_types.find_one({"id": type_activite_id}, {"_id": 0})
+    if not at:
+        return 0
+    name = (at.get("nom") or "").upper()
+    if name == "TPG":
+        return 0
+    return 1 if at.get("is_cours") else 0
+
 async def _auto_link_session_to_fiche(session: dict):
     """Auto-link a session to a matching fiche.activite if not already linked."""
     if not session or not session.get("ue_id"):
@@ -396,6 +412,9 @@ async def create_session(request: Request):
             b["duree"] = round(diff, 2)
         except:
             b["duree"] = 0
+    # Default nb_formateurs_requis from activity type (TPG=0, is_cours=1, others=0)
+    if "nb_formateurs_requis" not in b or b.get("nb_formateurs_requis") is None:
+        b["nb_formateurs_requis"] = await _default_nb_form_requis(b.get("type_activite_id"))
     created = await crud_create("sessions", b)
     await _auto_link_session_to_fiche(created)
     return created
@@ -416,6 +435,7 @@ async def update_session(id: str, request: Request):
             b["duree"] = round(diff, 2)
         except:
             pass
+    # If type changed but nb_formateurs_requis not provided, leave as-is
     updated = await crud_update("sessions", id, b)
     await _auto_link_session_to_fiche(updated)
     return updated
@@ -2235,14 +2255,30 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
     formateurs = await crud_list("formateurs")
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
 
-    total_cours = 0
-    heures_par_formateur = {}
+    # NEW formula:
+    # - total_cours_requis_h = sum(duree × nb_formateurs_requis) over is_cours sessions
+    #   => represents "trainer-hours" needed (the true volume to distribute).
+    # - capacite_totale = sum(quotité_i / 100) over all formateurs
+    # - ref_i = total_cours_requis_h × (quotité_i / 100) / capacite_totale
+    # - heures_assignées_i = sum(duree of cours sessions where i in formateur_ids)
+    # - ecart_i = heures_assignées_i - ref_i  (positive = surcharge)
+    total_cours_h = 0.0           # sum of durations of cours sessions (1 per session)
+    total_cours_requis_h = 0.0    # sum(duree × nb_formateurs_requis) over cours sessions
+    total_cours_assignees_h = 0.0 # sum(duree × len(formateur_ids)) over cours sessions
+    heures_par_formateur = {}     # fid -> {cours, total, par_type}
     for s in sessions:
-        dur = s.get("duree", 0)
+        dur = s.get("duree", 0) or 0
         tid = s.get("type_activite_id", "")
         is_cours = act_types.get(tid, {}).get("is_cours", False)
+        nb_req = s.get("nb_formateurs_requis")
+        if nb_req is None:
+            # Fallback: use type-based default if field missing on existing data
+            nm = (act_types.get(tid, {}).get("nom") or "").upper()
+            nb_req = 0 if nm == "TPG" else (1 if is_cours else 0)
         if is_cours:
-            total_cours += dur
+            total_cours_h += dur
+            total_cours_requis_h += dur * (nb_req or 0)
+            total_cours_assignees_h += dur * len(s.get("formateur_ids") or [])
         for fid in s.get("formateur_ids", []):
             if fid not in heures_par_formateur:
                 heures_par_formateur[fid] = {"cours": 0, "total": 0, "par_type": {}}
@@ -2252,17 +2288,23 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
             if is_cours:
                 heures_par_formateur[fid]["cours"] += dur
 
-    capacite_totale = sum(f.get("quotite", 100) / 100 for f in formateurs if f["id"] in heures_par_formateur)
+    # Capacity = total quotité across ALL active formateurs (not just those with sessions),
+    # so reference reflects equitable distribution over the whole team.
+    capacite_totale = sum((f.get("quotite", 100) or 100) / 100.0 for f in formateurs if f.get("actif", True) is not False)
+    if capacite_totale <= 0:
+        capacite_totale = sum((f.get("quotite", 100) or 100) / 100.0 for f in formateurs) or 1.0
+
     result = []
     for f in formateurs:
         fid = f["id"]
-        if fid not in heures_par_formateur:
-            continue
-        quotite = f.get("quotite", 100) / 100
-        ref = (total_cours * quotite / capacite_totale) if capacite_totale > 0 else 0
-        heures = heures_par_formateur[fid]["cours"]
+        quotite = (f.get("quotite", 100) or 100) / 100.0
+        ref = (total_cours_requis_h * quotite / capacite_totale) if capacite_totale > 0 else 0
+        h_data = heures_par_formateur.get(fid, {"cours": 0, "total": 0, "par_type": {}})
+        heures = h_data["cours"]
         ecart = heures - ref
-        if abs(ecart) <= ref * 0.1:
+        # Tolerance: ±10% of ref (or 5h floor for small references)
+        tol = max(ref * 0.10, 5.0)
+        if abs(ecart) <= tol:
             statut = "equilibre"
         elif ecart > 0:
             statut = "surcharge"
@@ -2275,14 +2317,21 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
             "initiales": f.get("initiales", ""),
             "quotite": f.get("quotite", 100),
             "heures_cours": round(heures, 2),
-            "heures_total": round(heures_par_formateur[fid]["total"], 2),
+            "heures_total": round(h_data["total"], 2),
             "reference": round(ref, 2),
             "ecart": round(ecart, 2),
             "statut": statut,
-            "par_type": heures_par_formateur[fid]["par_type"]
+            "par_type": h_data["par_type"],
         })
 
-    return {"formateurs": result, "total_cours_global": round(total_cours, 2), "capacite_totale": round(capacite_totale, 2)}
+    return {
+        "formateurs": result,
+        "total_cours_global": round(total_cours_h, 2),
+        "total_cours_requis": round(total_cours_requis_h, 2),
+        "total_cours_assignees": round(total_cours_assignees_h, 2),
+        "heures_a_pourvoir": round(max(0.0, total_cours_requis_h - total_cours_assignees_h), 2),
+        "capacite_totale": round(capacite_totale, 2),
+    }
 
 # ===================== ALERTS =====================
 @api_router.get("/alerts")
@@ -2412,26 +2461,73 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
                         "auto": True,
                     })
 
-    # 4) Surcharge : formateur > 8h le même jour
-    hours_by = {}
+    # 4) Surcharge : formateur ayant un écart > +10% (ou +5h) par rapport à sa charge
+    #    de référence sur la période (formule équitable selon quotité).
+    total_cours_requis_h = 0.0
+    cours_hours_by_fid = {}  # only cours hours per formateur
     for s in sessions:
+        dur = s.get("duree", 0) or 0
+        tid = s.get("type_activite_id", "")
+        at = act_types_map.get(tid, {})
+        is_cours = at.get("is_cours", False)
+        if not is_cours:
+            continue
+        nb_req = s.get("nb_formateurs_requis")
+        if nb_req is None:
+            nm = (at.get("nom") or "").upper()
+            nb_req = 0 if nm == "TPG" else 1
+        total_cours_requis_h += dur * (nb_req or 0)
         for fid in (s.get("formateur_ids") or []):
-            key = (fid, s.get("date"))
-            hours_by[key] = hours_by.get(key, 0) + (s.get("duree") or 0)
-    for (fid, d), h in hours_by.items():
-        if h > 8.5:
-            f = formateurs.get(fid, {})
+            cours_hours_by_fid[fid] = cours_hours_by_fid.get(fid, 0) + dur
+    all_formateurs = await crud_list("formateurs")
+    capacite_totale = sum((f.get("quotite", 100) or 100) / 100.0 for f in all_formateurs if f.get("actif", True) is not False)
+    if capacite_totale <= 0:
+        capacite_totale = sum((f.get("quotite", 100) or 100) / 100.0 for f in all_formateurs) or 1.0
+    for f in all_formateurs:
+        fid = f["id"]
+        quotite = (f.get("quotite", 100) or 100) / 100.0
+        ref = (total_cours_requis_h * quotite / capacite_totale) if capacite_totale > 0 else 0
+        heures = cours_hours_by_fid.get(fid, 0)
+        ecart = heures - ref
+        tol = max(ref * 0.10, 5.0)
+        if ecart > tol and ref > 0:
             alerts.append({
                 "type": "warning", "category": "surcharge",
                 "title": "Surcharge formateur",
-                "message": f"{f.get('prenom','?')} {f.get('nom','?')} cumule {h:.1f}h sur cette journée (>8h).",
-                "context": d,
-                "session_id": None, "date": d,
+                "message": f"{f.get('prenom','?')} {f.get('nom','?')} : {heures:.1f}h de cours assignées vs {ref:.1f}h de référence (écart +{ecart:.1f}h, > +{tol:.0f}h).",
+                "context": f"{date_debut} → {date_fin}",
+                "session_id": None, "date": date_debut,
                 "heure_debut": None, "heure_fin": None,
                 "auto": True,
             })
 
     return alerts
+
+# ===================== MIGRATIONS =====================
+@api_router.post("/migrations/backfill-nb-formateurs-requis")
+async def backfill_nb_formateurs_requis(request: Request):
+    """Backfill nb_formateurs_requis on existing sessions:
+       - TPG → 0
+       - is_cours type → 1
+       - non-cours type → 0
+       Skips sessions that already have the field set.
+    """
+    await require_admin(request)
+    act_types = {a["id"]: a for a in await crud_list("activity_types")}
+    cursor = db.sessions.find({"nb_formateurs_requis": {"$exists": False}}, {"_id": 0})
+    updated = 0
+    async for s in cursor:
+        at = act_types.get(s.get("type_activite_id"), {})
+        nm = (at.get("nom") or "").upper()
+        if nm == "TPG":
+            nb = 0
+        elif at.get("is_cours"):
+            nb = 1
+        else:
+            nb = 0
+        await db.sessions.update_one({"id": s["id"]}, {"$set": {"nb_formateurs_requis": nb}})
+        updated += 1
+    return {"updated": updated}
 
 # ===================== SEED DATA =====================
 @api_router.post("/seed")

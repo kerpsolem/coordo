@@ -1,0 +1,44 @@
+{
+  "summary": "Iter20 - Tested the nb_formateurs_requis refactor end-to-end. Backend (14/14 pytest tests pass): migration backfill is idempotent and persists field on every session; POST /sessions auto-defaults the field based on activity type's is_cours flag (TPG=0, is_cours=1, else 0); explicit values not overwritten; PUT updates the field; /workload returns the new fields (total_cours_global, total_cours_requis, total_cours_assignees, heures_a_pourvoir, capacite_totale) and per-formateur (heures_cours, reference, ecart, statut) with statut respecting tol=max(10%*ref, 5h); /alerts surfaces detailed surcharge alerts (4 fired on the seed, message format matches spec). Frontend: Recap heures page shows the 3 new KPI cards (kpi-cours-requis, kpi-cours-assignees, kpi-a-pourvoir); Par formateur page shows 4 KPI cards including Volume théorique selon quotité and Écart with status; Alertes Surcharge filter shows the 4 expected surcharge alerts; Planning Global dialog exposes nb-formateurs-requis-input and nb-formateurs-count badge with live state ('X / Y ✓ complet' green vs '⚠ incomplet' red/amber); selecting a type auto-fills requis (TD/TP/CM/CMo→1, TPG→0); explicit value is preserved when type is later changed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/sessions/{id}", "issue": "Returns 405 Method Not Allowed — no single-session GET route. Tests need to fetch the session via /api/sessions list. Not a regression; minor API gap."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "data_configuration_notes": [
+    "Activity type 'CM' in the live DB has is_cours=False (so POST /sessions of type CM defaults to nb_formateurs_requis=0). Per the business spec, CM is a 'cours magistral' and should default to 1. The CODE is correct (it reads is_cours); the DB seed/state has 'CM' flagged incorrectly. Fix recommendation: PATCH the CM activity-type to is_cours=true (or have the user fix it via admin UI).",
+    "Activity type 'EVAL' in the live DB has is_cours=True, so EVAL sessions default to nb_formateurs_requis=1 (and the dialog auto-fills 1). Per spec EVAL should be 0. Same root cause — DB data, not code. Recommendation: set EVAL.is_cours=false in seed/DB.",
+    "There are duplicate 'TA' rows in activity-types (one with is_cours=true, one with is_cours=null). Recommend deduping."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter20_nb_formateurs_requis.py",
+    "/app/test_reports/pytest/pytest_iter20.xml"
+  ],
+  "action_items": [
+    "Add a GET /api/sessions/{id} endpoint (or document its absence) — currently 405. Low priority but useful for clients that need to refetch a single session by id.",
+    "Correct activity-type seed data: CM should be is_cours=true; EVAL should be is_cours=false; dedupe duplicate 'TA' entries. Otherwise the auto-default for nb_formateurs_requis (both backend and frontend) yields business-incorrect values for new CM/EVAL sessions.",
+    "After the data fix, re-run POST /migrations/backfill-nb-formateurs-requis if old sessions with CM/EVAL need their nb_formateurs_requis re-derived (currently the migration only fills the field for sessions where it is missing — it will NOT recompute existing 0/1 values)."
+  ],
+  "critical_code_review_comments": [
+    "_default_nb_form_requis derives the default purely from the activity_type's is_cours flag (and a TPG name override). This couples business expectations (CM/CMo/TD/TP/EVAL semantics) to a single boolean column. Consider either: (a) adding a dedicated 'default_nb_formateurs' on activity_type, or (b) hardcoding a name-based override list (TPG, EVAL, SI, Stage = 0; CM/CMo/TD/TP/TA = 1) so the business rule survives is_cours toggles.",
+    "PUT /api/sessions on type change does not re-derive nb_formateurs_requis (only POST does). Acceptable for the explicit-not-overwritten rule, but worth a quick UX note: changing type after creation will keep the prior requis value silently.",
+    "/workload computes reference using capacite_totale of ALL active formateurs even when promotion_ids filter is applied — that may overstate/understate per-formateur expectation for filtered scopes. Confirm this is the intended behaviour.",
+    "PlanningGlobal.js is still 1257+ lines; the new dialog logic increases coupling. Consider splitting the dialog into its own component (see iter19 reviewer comment)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter20_nb_formateurs_requis.py (new)"
+  ],
+  "success_rate": {"backend": "100% (14/14 pytest)", "frontend": "100% (all data-testids found, all auto-fill scenarios verified)"},
+  "test_credentials": "admin@ifsi.fr / Admin123! - OK",
+  "seed_data_creation": "8 test sessions created during pytest (intitule prefixed TEST_iter20_*), all deleted in module teardown. Verified via final DELETE in fixture.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend migration endpoint is idempotent (run safely). Note that activity_types in the live DB drift from the seed: CM.is_cours=false and EVAL.is_cours=true, which inverts the spec defaults for those types. The frontend and backend both honour whatever is_cours is set to. If business rules are tightened in the future to enforce CM=1 / EVAL=0 regardless of is_cours, _default_nb_form_requis and the matching JS helper in PlanningGlobal.js / CoordinationPlanning.js will need a name-based override list.",
+  "rca of the issue": "No code bug found. The two surprising cases (CM defaults to 0, EVAL defaults to 1) trace back to the activity_types collection in MongoDB carrying is_cours values that diverge from the original seed and from the business spec. Reproduction: GET /api/activity-types shows CM is_cours=false, EVAL is_cours=true. Mitigation: PATCH the activity types via /api/activity-types/{id} to restore the intended flags, then optionally re-run the backfill to re-derive nb_formateurs_requis for legacy sessions (note: current backfill only fills missing fields; an additional 'recompute' option would be needed to overwrite existing values)."
+}

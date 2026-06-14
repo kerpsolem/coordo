@@ -420,7 +420,16 @@ export default function CoordinationPlanning() {
               <div><Label>Heure fin</Label><Input type="time" value={editSession.heure_fin || ''} onChange={e => setEditSession({ ...editSession, heure_fin: e.target.value })} /></div>
               <div>
                 <Label>Type</Label>
-                <Select value={editSession.type_activite_id || ''} onValueChange={v => setEditSession({ ...editSession, type_activite_id: v })}>
+                <Select value={editSession.type_activite_id || ''} onValueChange={v => {
+                  const at = actTypes.find(a => a.id === v) || {};
+                  const nm = (at.nom || '').toUpperCase();
+                  const defReq = nm === 'TPG' ? 0 : (at.is_cours ? 1 : 0);
+                  setEditSession(es => ({
+                    ...es,
+                    type_activite_id: v,
+                    nb_formateurs_requis: (es.nb_formateurs_requis === undefined || es.nb_formateurs_requis === null || es.nb_formateurs_requis === '') ? defReq : es.nb_formateurs_requis,
+                  }));
+                }}>
                   <SelectTrigger><SelectValue placeholder="Choisir" /></SelectTrigger>
                   <SelectContent>{actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}</SelectContent>
                 </Select>
@@ -482,6 +491,27 @@ export default function CoordinationPlanning() {
               </div>
               <div className="col-span-2">
                 <Label>Formateurs <span className="text-[10px] text-slate-500 font-normal ml-2">Clic : ✓ sélection · clic 2 : ★ joker · clic 3 : retirer</span></Label>
+                {(() => {
+                  const ids = editSession.formateur_ids || [];
+                  const req = editSession.nb_formateurs_requis;
+                  const reqNum = (req === undefined || req === null || req === '') ? null : parseInt(req, 10);
+                  const have = ids.length;
+                  const incomplete = reqNum !== null && have < reqNum;
+                  const overflow = reqNum !== null && have > reqNum;
+                  return (
+                    <div className="flex items-center gap-2 mt-1 mb-2">
+                      <span className="text-xs text-slate-500">Requis :</span>
+                      <Input type="number" min="0" max="20" value={req ?? ''}
+                        onChange={e => setEditSession({ ...editSession, nb_formateurs_requis: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                        className="h-7 w-20 text-xs"
+                        data-testid="nb-formateurs-requis-input-coord" />
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${incomplete ? 'bg-red-50 border-red-300 text-red-700' : overflow ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-emerald-50 border-emerald-300 text-emerald-700'}`}
+                            data-testid="nb-formateurs-count-coord">
+                        {have} / {reqNum ?? '?'} {incomplete ? '⚠ incomplet' : overflow ? '+ surnombre' : reqNum !== null ? '✓ complet' : ''}
+                      </span>
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-wrap gap-2 mt-1">
                   {formateurs.map(f => {
                     const ids = editSession.formateur_ids || [];
