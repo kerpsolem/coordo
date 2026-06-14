@@ -229,11 +229,11 @@ export default function Tice() {
     progressRef.current = { id: p.id, rect, snapshot: { ...p } };
   };
 
-  // Status pill styles per mockup (light bg, colored text)
+  // Status pill styles — couleurs vives (moins de blanc)
   const STATUT_PILL = {
-    'À faire': 'bg-slate-100 text-slate-600 border-slate-200',
-    'En cours': 'bg-amber-50 text-amber-700 border-amber-200',
-    'Terminé': 'bg-emerald-100 text-emerald-700 border-emerald-300',
+    'À faire': 'bg-slate-600 text-white border-slate-700',
+    'En cours': 'bg-amber-500 text-white border-amber-600',
+    'Terminé': 'bg-emerald-600 text-white border-emerald-700',
   };
 
   // --- Render ---
@@ -285,7 +285,7 @@ export default function Tice() {
     const respTice = formateurs.find(f => f.id === p.formateur_tice_id);
     return (
       <React.Fragment key={p.id}>
-        <div className="flex border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/40 group relative" style={{ minHeight: '88px' }}>
+        <div className="flex border-b border-slate-100 dark:border-slate-800 hover:bg-coral-50/40 dark:hover:bg-slate-900/40 group relative odd:bg-white even:bg-cream-50/30 dark:odd:bg-slate-950 dark:even:bg-slate-900/30" style={{ minHeight: '88px' }}>
           {/* Left: title + meta + status + actions */}
           <div className="flex-shrink-0 w-[320px] border-r border-slate-200 dark:border-slate-700 px-3 py-3 flex items-start gap-2" style={{ paddingLeft: `${12 + depth * 16}px` }}>
             {subs.length > 0 ? (
@@ -336,36 +336,38 @@ export default function Tice() {
   return (
     <Layout>
       <div className="space-y-3" data-testid="tice-page">
-        <div className="flex items-center justify-between">
+        {/* Header with navy bg */}
+        <div className="flex items-center justify-between rounded-lg bg-gradient-to-r from-[#0E1F36] to-[#1A3658] px-5 py-3 shadow">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2"><LayersIcon size={22} className="text-coral-500" /> Cellule TICE</h1>
-            <p className="text-xs text-slate-500">Suivi des projets numériques en diagramme de Gantt</p>
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-white"><LayersIcon size={22} className="text-coral-300" /> Cellule TICE</h1>
+            <p className="text-xs text-slate-300">Suivi des projets numériques en diagramme de Gantt</p>
           </div>
-          <Button onClick={() => startCreate(null)} data-testid="tice-new-project" className="bg-coral-500 hover:bg-coral-600 text-white">
+          <Button onClick={() => startCreate(null)} data-testid="tice-new-project" className="bg-coral-500 hover:bg-coral-600 text-white shadow-md font-semibold">
             <Plus size={16} className="mr-1" /> Nouveau projet
           </Button>
         </div>
 
         {/* Filters */}
-        <Card>
+        <Card className="bg-cream-50 dark:bg-slate-900 border-coral-100 dark:border-slate-700">
           <CardContent className="py-2.5 px-3 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5"><Filter size={14} className="text-slate-400" /><span className="text-xs font-medium text-slate-500">Filtres :</span></div>
-            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="w-48 h-8 text-xs" data-testid="tice-search" />
-            <div className="flex items-center gap-1 text-xs">Du <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="h-8 w-36 text-xs" /></div>
-            <div className="flex items-center gap-1 text-xs">au <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="h-8 w-36 text-xs" /></div>
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+            <div className="flex items-center gap-1.5"><Filter size={14} className="text-coral-500" /><span className="text-xs font-bold text-[#0E1F36] dark:text-coral-300">Filtres</span></div>
+            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="w-48 h-8 text-xs border-coral-200 focus:border-coral-400" data-testid="tice-search" />
+            <div className="flex items-center gap-1 text-xs text-[#0E1F36]">Du <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="h-8 w-36 text-xs border-coral-200" /></div>
+            <div className="flex items-center gap-1 text-xs text-[#0E1F36]">au <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="h-8 w-36 text-xs border-coral-200" /></div>
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer text-[#0E1F36] font-medium">
               <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} data-testid="tice-show-archived" />
               Archivés
             </label>
             {/* Status filter chips */}
-            <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 dark:border-slate-700 pl-3" data-testid="tice-filter-statuts">
+            <div className="flex items-center gap-1.5 ml-2 border-l border-coral-200 dark:border-slate-700 pl-3" data-testid="tice-filter-statuts">
               {STATUTS.map(s => {
                 const active = filterStatuts[s] !== false;
                 const count = projets.filter(p => p.archive === showArchived && p.statut === s).length;
-                const cls = active ? `${STATUT_COLORS[s]} text-white shadow-sm` : 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-60';
+                const activeCls = STATUT_PILL[s] || 'bg-slate-600 text-white border-slate-700';
+                const cls = active ? `${activeCls} shadow-sm` : 'bg-white dark:bg-slate-800 text-slate-400 border-slate-300 opacity-60';
                 return (
                   <button key={s} type="button" onClick={() => setFilterStatuts(p => ({ ...p, [s]: !active }))}
-                    className={`text-[10px] px-2 py-1 rounded-full border border-transparent font-medium transition-all ${cls}`}
+                    className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold transition-all ${cls}`}
                     title={active ? `Masquer ${s}` : `Afficher ${s}`}
                     data-testid={`tice-statut-${s}`}>
                     {s} ({count})
@@ -374,10 +376,10 @@ export default function Tice() {
               })}
             </div>
             <div className="ml-auto flex items-center gap-2 text-xs">
-              <Button variant="outline" size="sm" onClick={() => { const d = new Date(viewMonth); d.setMonth(d.getMonth() - 1); setViewMonth(d); }}>«</Button>
-              <span className="font-semibold min-w-[120px] text-center">{viewMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</span>
-              <Button variant="outline" size="sm" onClick={() => { const d = new Date(viewMonth); d.setMonth(d.getMonth() + 1); setViewMonth(d); }}>»</Button>
-              <Button variant="ghost" size="sm" onClick={() => { const d = new Date(); d.setDate(1); setViewMonth(d); }}>Aujourd&apos;hui</Button>
+              <Button variant="outline" size="sm" className="border-coral-300 text-coral-700 hover:bg-coral-50" onClick={() => { const d = new Date(viewMonth); d.setMonth(d.getMonth() - 1); setViewMonth(d); }}>«</Button>
+              <span className="font-bold min-w-[120px] text-center text-[#0E1F36] dark:text-coral-300 capitalize">{viewMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</span>
+              <Button variant="outline" size="sm" className="border-coral-300 text-coral-700 hover:bg-coral-50" onClick={() => { const d = new Date(viewMonth); d.setMonth(d.getMonth() + 1); setViewMonth(d); }}>»</Button>
+              <Button size="sm" className="bg-[#0E1F36] hover:bg-[#1A3658] text-white" onClick={() => { const d = new Date(); d.setDate(1); setViewMonth(d); }}>Aujourd&apos;hui</Button>
             </div>
           </CardContent>
         </Card>
@@ -386,15 +388,15 @@ export default function Tice() {
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto" data-testid="tice-gantt">
-              <div className="flex border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky top-0 z-10">
-                <div className="flex-shrink-0 w-[360px] border-r border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Projet</div>
+              <div className="flex border-b-2 border-[#0E1F36] dark:border-coral-700 bg-[#0E1F36] dark:bg-slate-900 sticky top-0 z-10">
+                <div className="flex-shrink-0 w-[320px] border-r border-coral-700 dark:border-slate-700 px-3 py-2 text-xs font-bold text-white">Projet</div>
                 <div className="flex" style={{ width: `${TOTAL_W}px` }}>
                   {weeks.map((w, i) => {
                     const isNewMonth = i === 0 || w.getMonth() !== weeks[i - 1].getMonth();
                     return (
-                      <div key={i} className={`flex-shrink-0 border-r border-slate-200 dark:border-slate-700 text-center text-[10px] py-1 ${isNewMonth ? 'bg-coral-50/40 dark:bg-coral-900/10 font-bold' : ''}`} style={{ width: `${WEEK_W}px` }}>
-                        <div className="text-slate-500">S{isoWeek(w)}</div>
-                        {isNewMonth && <div className="text-coral-600 text-[9px] uppercase">{w.toLocaleDateString('fr-FR', { month: 'short' })}</div>}
+                      <div key={i} className={`flex-shrink-0 border-r border-[#1A3658] dark:border-slate-700 text-center text-[10px] py-1 text-white ${isNewMonth ? 'bg-coral-500/30 font-bold' : ''}`} style={{ width: `${WEEK_W}px` }}>
+                        <div className="text-slate-200">S{isoWeek(w)}</div>
+                        {isNewMonth && <div className="text-coral-200 text-[9px] uppercase">{w.toLocaleDateString('fr-FR', { month: 'short' })}</div>}
                       </div>
                     );
                   })}
