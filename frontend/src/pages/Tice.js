@@ -72,6 +72,7 @@ export default function Tice() {
   const [search, setSearch] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterStatuts, setFilterStatuts] = useState({ 'À faire': true, 'En cours': true, 'Terminé': true });
   const [expandedParents, setExpandedParents] = useState({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -101,6 +102,7 @@ export default function Tice() {
   // Filter
   const filtered = useMemo(() => {
     let list = projets.filter(p => p.archive === showArchived);
+    list = list.filter(p => filterStatuts[p.statut] !== false);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(p => (p.titre || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
@@ -112,7 +114,7 @@ export default function Tice() {
       list = list.filter(p => (p.date_debut || '0000') <= filterDateTo);
     }
     return list;
-  }, [projets, showArchived, search, filterDateFrom, filterDateTo]);
+  }, [projets, showArchived, filterStatuts, search, filterDateFrom, filterDateTo]);
 
   // --- Drag/resize logic ---
   const dragRef = useRef(null);
@@ -254,6 +256,7 @@ export default function Tice() {
             onMouseDown={(e) => onProgressMouseDown(e, p)} title="Tirer pour ajuster la progression" />
           {/* Title */}
           <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-semibold truncate pointer-events-none">
+            {p.statut === 'Terminé' && <span className="mr-1 text-white flex-shrink-0">✓</span>}
             {p.titre} <span className="ml-1.5 opacity-80 text-[10px]">{p.progression || 0}%</span>
           </div>
           {/* Mardis identifiés markers */}
@@ -335,6 +338,22 @@ export default function Tice() {
               <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} data-testid="tice-show-archived" />
               Archivés
             </label>
+            {/* Status filter chips */}
+            <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 dark:border-slate-700 pl-3" data-testid="tice-filter-statuts">
+              {STATUTS.map(s => {
+                const active = filterStatuts[s] !== false;
+                const count = projets.filter(p => p.archive === showArchived && p.statut === s).length;
+                const cls = active ? `${STATUT_COLORS[s]} text-white shadow-sm` : 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-60';
+                return (
+                  <button key={s} type="button" onClick={() => setFilterStatuts(p => ({ ...p, [s]: !active }))}
+                    className={`text-[10px] px-2 py-1 rounded-full border border-transparent font-medium transition-all ${cls}`}
+                    title={active ? `Masquer ${s}` : `Afficher ${s}`}
+                    data-testid={`tice-statut-${s}`}>
+                    {s} ({count})
+                  </button>
+                );
+              })}
+            </div>
             <div className="ml-auto flex items-center gap-2 text-xs">
               <Button variant="outline" size="sm" onClick={() => { const d = new Date(viewMonth); d.setMonth(d.getMonth() - 1); setViewMonth(d); }}>«</Button>
               <span className="font-semibold min-w-[120px] text-center">{viewMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</span>
