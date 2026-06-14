@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Edit2, Trash2, Archive, ArchiveRestore, RefreshCw, Clock, CalendarOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, Archive, ArchiveRestore, RefreshCw, Clock, CalendarOff, Calendar } from 'lucide-react';
 
 export default function AbsencesFormateurs() {
   const { isAdmin } = useAuth();
@@ -18,6 +18,7 @@ export default function AbsencesFormateurs() {
   const [view, setView] = useState('en_cours');
   const [editItem, setEditItem] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
+  const [excDateInput, setExcDateInput] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -37,14 +38,14 @@ export default function AbsencesFormateurs() {
   const today = new Date().toISOString().split('T')[0];
 
   const startEdit = (item) => {
-    setEditItem({ ...item, jours_recurrence: item.jours_recurrence || [] });
+    setEditItem({ ...item, jours_recurrence: item.jours_recurrence || [], exceptions: item.exceptions || [] });
     setShowDialog(true);
   };
 
   const startNew = () => {
     setEditItem({
       formateur_id: '', date_debut: '', date_fin: '', journee_entiere: true, periode: 'journee',
-      recurrence: false, type_recurrence: '', jours_recurrence: [], date_fin_recurrence: '', archived: false
+      recurrence: false, type_recurrence: '', jours_recurrence: [], date_fin_recurrence: '', archived: false, exceptions: []
     });
     setShowDialog(true);
   };
@@ -252,6 +253,33 @@ export default function AbsencesFormateurs() {
                     </div>
                   </div>
                   <div><Label>Date fin recurrence</Label><Input type="date" value={editItem.date_fin_recurrence || ''} onChange={e => setEditItem({ ...editItem, date_fin_recurrence: e.target.value })} /></div>
+                  {/* Présences exceptionnelles */}
+                  <div className="col-span-2 border-t pt-3 mt-2">
+                    <Label className="flex items-center gap-1.5">
+                      <Calendar size={14} /> Présences exceptionnelles
+                      <span className="text-[10px] text-slate-400 font-normal">(dates où le formateur est PRÉSENT malgré la récurrence)</span>
+                    </Label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Input type="date" value={excDateInput} onChange={e => setExcDateInput(e.target.value)} className="w-40" data-testid="absence-exc-date" />
+                      <Button type="button" size="sm" variant="outline" onClick={() => {
+                        if (!excDateInput) return;
+                        const ex = editItem.exceptions || [];
+                        if (ex.includes(excDateInput)) return;
+                        setEditItem({ ...editItem, exceptions: [...ex, excDateInput].sort() });
+                        setExcDateInput('');
+                      }} data-testid="absence-exc-add">+ Ajouter</Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2" data-testid="absence-exc-list">
+                      {(editItem.exceptions || []).length === 0 && <span className="text-[10px] text-slate-400 italic">Aucune exception</span>}
+                      {(editItem.exceptions || []).map(d => (
+                        <span key={d} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded text-[11px]">
+                          ✓ {new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                          <button type="button" onClick={() => setEditItem({ ...editItem, exceptions: editItem.exceptions.filter(x => x !== d) })}
+                            className="ml-1 text-emerald-500 hover:text-red-600">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
               <div className="flex justify-end gap-2 pt-2">

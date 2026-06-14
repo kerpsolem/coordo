@@ -537,9 +537,14 @@ async def absences_for_period(date_debut: str, date_fin: str):
             type_rec = (ab.get("type_recurrence") or "hebdomadaire").lower()
             step_weeks = 2 if type_rec in ("bimensuelle", "bi-mensuelle", "bimensuel", "bi_mensuelle") else 1
             parite = (ab.get("parite_semaine") or "").lower()  # '', 'paire', 'impaire'
+            exceptions = set(ab.get("exceptions") or [])  # ISO dates where the trainer is actually present
             current = d_start
             while current <= min(d_end, rec_end):
                 if current.weekday() in jours and current >= ab_start:
+                    # Skip if this date is a presence exception
+                    if current.isoformat() in exceptions:
+                        current = current + timedelta(days=1)
+                        continue
                     # For bi-weekly: include only if (current - ab_start).days // 7 is even
                     if step_weeks == 1:
                         ok = True
@@ -578,7 +583,11 @@ async def absences_for_period(date_debut: str, date_fin: str):
             overlap_start = max(d_start, ab_start)
             overlap_end = min(d_end, ab_end)
             current = overlap_start
+            exceptions = set(ab.get("exceptions") or [])
             while current <= overlap_end:
+                if current.isoformat() in exceptions:
+                    current += timedelta(days=1)
+                    continue
                 result.append({
                     "formateur_id": ab.get("formateur_id"),
                     "formateur_nom": f.get("nom", ""),
@@ -591,7 +600,66 @@ async def absences_for_period(date_debut: str, date_fin: str):
                     "absence_id": ab.get("id")
                 })
                 current += timedelta(days=1)
-    return result
+    # Dedupe : un formateur ne doit apparaitre qu'une fois par (date, periode)
+    # Priorite : journee > matin/aprem ; si conflit, on garde la 1ere et on fusionne les absence_ids
+    seen = {}  # (formateur_id, date, periode) -> entry
+    for entry in result:
+        key = (entry["formateur_id"], entry["date"], entry["periode"])
+        if key in seen:
+            # Track all absence ids for traceability
+            existing = seen[key]
+            other_ids = existing.setdefault("absence_ids", [existing.get("absence_id")])
+            if entry.get("absence_id") and entry["absence_id"] not in other_ids:
+                other_ids.append(entry["absence_id"])
+            continue
+        seen[key] = entry
+    # Also collapse matin+aprem -> journee for same formateur+date
+    by_fd = {}
+    for k, e in seen.items():
+        fd = (e["formateur_id"], e["date"])
+        by_fd.setdefault(fd, []).append(e)
+    final = []
+    for fd, items in by_fd.items():
+        periodes = {i["periode"] for i in items}
+        if "journee" in periodes:
+            # Keep only the journee entry
+            for i in items:
+                if i["periode"] == "journee":
+                    final.append(i); break
+        elif "matin" in periodes and "apres-midi" in periodes:
+            base = items[0].copy()
+            base["periode"] = "journee"
+            base["absence_ids"] = list({i.get("absence_id") for i in items if i.get("absence_id")})
+            final.append(base)
+        else:
+            final.extend(items)
+    return final
+
+@api_router.post("/absences/{id}/exception")
+async def add_absence_exception(id: str, request: Request):
+    """Marque une date où le formateur est exceptionnellement présent (skip de la récurrence)."""
+    await require_admin_or_secretariat(request)
+    b = await request.json()
+    date_str = b.get("date")
+    if not date_str:
+        raise HTTPException(400, "date requise")
+    ab = await db.absences.find_one({"id": id}, {"_id": 0})
+    if not ab:
+        raise HTTPException(404, "Absence non trouvee")
+    ex = list(set((ab.get("exceptions") or []) + [date_str]))
+    await db.absences.update_one({"id": id}, {"$set": {"exceptions": ex, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"id": id, "exceptions": ex}
+
+@api_router.delete("/absences/{id}/exception")
+async def remove_absence_exception(id: str, request: Request, date_str: str):
+    """Retire une exception (le formateur redevient absent ce jour-là)."""
+    await require_admin_or_secretariat(request)
+    ab = await db.absences.find_one({"id": id}, {"_id": 0})
+    if not ab:
+        raise HTTPException(404, "Absence non trouvee")
+    ex = [x for x in (ab.get("exceptions") or []) if x != date_str]
+    await db.absences.update_one({"id": id}, {"$set": {"exceptions": ex, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"id": id, "exceptions": ex}
 
 # ===================== COPY ATTRIBUTIONS =====================
 @api_router.get("/copy-attributions")
