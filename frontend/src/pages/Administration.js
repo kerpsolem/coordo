@@ -179,7 +179,9 @@ export default function Administration() {
     formateurs: [
       ['nom', 'Nom'], ['prenom', 'Prenom'], ['email', 'Email', 'email'], ['initiales', 'Initiales'],
       ['statut', 'Statut', 'select', [{ value: 'Formateur', label: 'Formateur' }, { value: 'Vacataire', label: 'Vacataire' }]],
-      ['quotite', 'Quotite (%)', 'number'], ['birth_day', 'Jour naissance', 'number'], ['birth_month', 'Mois naissance', 'number'], ['remarques', 'Remarques']
+      ['quotite', 'Quotite (%)', 'number'], ['birth_day', 'Jour naissance', 'number'], ['birth_month', 'Mois naissance', 'number'],
+      ['tice', 'Profil TICE (accès Cellule TICE)', 'checkbox'],
+      ['remarques', 'Remarques']
     ],
     promotions: [
       ['nom', 'Nom'], ['annee_entree', 'Annee entree', 'number'], ['annee_sortie', 'Annee sortie', 'number'],
@@ -242,6 +244,7 @@ export default function Administration() {
           <CrudTable title="Formateurs" icon={Users} items={formateurs} isAdmin={isAdmin}
             columns={[{ key: 'initiales', label: 'Init.' }, { key: 'nom', label: 'Nom' }, { key: 'prenom', label: 'Prenom' },
               { key: 'statut', label: 'Statut' }, { key: 'quotite', label: 'Quotite', render: i => `${i.quotite || 100}%` },
+              { key: 'tice', label: 'TICE', render: i => i.tice ? <span className="text-coral-600 font-semibold">★</span> : '' },
               { key: 'email', label: 'Email' }]}
             onAdd={() => openDialog('formateurs')} onEdit={i => openDialog('formateurs', i)} onDelete={id => del('formateurs', id)} />
         </TabsContent>

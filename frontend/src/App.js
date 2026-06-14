@@ -16,6 +16,7 @@ import Alertes from './pages/Alertes';
 import AbsencesFormateurs from './pages/AbsencesFormateurs';
 import PenseBetes from './pages/PenseBetes';
 import Administration from './pages/Administration';
+import Tice from './pages/Tice';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -45,6 +46,7 @@ function App() {
           <Route path="/absences-formateurs" element={<ProtectedRoute><AbsencesFormateurs /></ProtectedRoute>} />
           <Route path="/pense-betes" element={<ProtectedRoute><PenseBetes /></ProtectedRoute>} />
           <Route path="/administration" element={<ProtectedRoute><Administration /></ProtectedRoute>} />
+          <Route path="/tice" element={<ProtectedRoute><Tice /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AuthProvider>

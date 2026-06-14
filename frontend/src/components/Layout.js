@@ -9,7 +9,7 @@ import API from '../lib/api';
 import {
   LayoutDashboard, Calendar, Map, Users, UserCheck, ClipboardList,
   Clock, Settings, AlertTriangle, UserX, StickyNote, LogOut,
-  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key, FolderKanban, Plane, GraduationCap
+  Sun, Moon, ChevronDown, ChevronRight, BookOpen, FileText, Menu, X, Key, FolderKanban, Plane, GraduationCap, Layers
 } from 'lucide-react';
 
 const consultationLinks = [
@@ -24,6 +24,7 @@ const consultationLinks = [
 
 const coordinationLinks = [
   { to: '/coordination-planning', label: 'Coordination planning', icon: BookOpen },
+  { to: '/tice', label: 'TICE', icon: Layers, requiresTice: true },
   { to: '/alertes', label: 'Alertes', icon: AlertTriangle },
   { to: '/absences-formateurs', label: 'Absences formateurs', icon: UserX },
   { to: '/pense-betes', label: 'Pense-betes', icon: StickyNote },
@@ -31,7 +32,7 @@ const coordinationLinks = [
 ];
 
 export default function Layout({ children }) {
-  const { user, logout, isAdmin, isSuperAdmin, isSecretariat } = useAuth();
+  const { user, logout, isAdmin, isSuperAdmin, isSecretariat, isTice } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -64,7 +65,7 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
-  const showCoordination = isAdmin || isSecretariat;
+  const showCoordination = isAdmin || isSecretariat || isTice;
   const isCoordPage = coordinationLinks.some(l => location.pathname === l.to);
 
   const NavLink = ({ to, label, icon: Icon }) => {
@@ -131,6 +132,7 @@ export default function Layout({ children }) {
               {coordOpen && (
                 <div className="space-y-0.5">
                   {coordinationLinks.map(l => {
+                    if (l.to === '/tice' && !isTice) return null;
                     if (isSecretariat && !isAdmin && l.to !== '/coordination-planning') return null;
                     if (l.to === '/administration' && !isSuperAdmin && user?.role !== 'admin_coordination') return null;
                     return <NavLink key={l.to} {...l} />;

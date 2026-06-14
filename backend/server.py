@@ -67,6 +67,18 @@ async def require_admin_or_secretariat(request: Request):
         raise HTTPException(403, "Acces non autorise")
     return u
 
+async def require_tice_access(request: Request):
+    """Admin OR formateur with tice flag = True."""
+    u = await get_user(request)
+    if u.get("role") in ["super_admin", "admin_coordination"]:
+        return u
+    if u.get("role") == "formateur":
+        # Match user to formateur by email
+        f = await db.formateurs.find_one({"email": u.get("email")}, {"_id": 0})
+        if f and f.get("tice"):
+            return u
+    raise HTTPException(403, "Acces TICE non autorise")
+
 # ===================== AUTH ROUTES =====================
 @api_router.post("/auth/login")
 async def login(request: Request, response: Response):
@@ -89,7 +101,16 @@ async def logout(response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(request: Request):
-    return await get_user(request)
+    u = await get_user(request)
+    # Derive TICE flag from linked formateur
+    if u.get("role") == "formateur":
+        f = await db.formateurs.find_one({"email": u.get("email")}, {"_id": 0})
+        if f:
+            u["tice"] = bool(f.get("tice", False))
+            u["formateur_id"] = f.get("id")
+    else:
+        u["tice"] = u.get("role") in ["super_admin", "admin_coordination"]
+    return u
 
 # ===================== GENERIC CRUD =====================
 def clean_doc(doc):
@@ -2604,6 +2625,38 @@ async def seed_admin():
         logger.info(f"Admin cree: {admin_email}")
     elif not verify_pw(admin_password, existing.get("password_hash", "")):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_pw(admin_password)}})
+# ===================== TICE PROJETS =====================
+@api_router.get("/tice/projets")
+async def list_tice_projets(request: Request, archived: Optional[bool] = None):
+    await require_tice_access(request)
+    q = {}
+    if archived is not None:
+        q["archive"] = archived
+    return await crud_list("tice_projets", q, sort=[("date_debut", 1)])
+
+@api_router.post("/tice/projets")
+async def create_tice_projet(request: Request):
+    await require_tice_access(request)
+    b = await request.json()
+    b.setdefault("statut", "À faire")
+    b.setdefault("progression", 0)
+    b.setdefault("archive", False)
+    b.setdefault("parent_id", None)
+    return await crud_create("tice_projets", b)
+
+@api_router.put("/tice/projets/{id}")
+async def update_tice_projet(id: str, request: Request):
+    await require_tice_access(request)
+    b = await request.json()
+    return await crud_update("tice_projets", id, b)
+
+@api_router.delete("/tice/projets/{id}")
+async def delete_tice_projet(id: str, request: Request):
+    await require_tice_access(request)
+    # Also delete sub-projects
+    await db.tice_projets.delete_many({"parent_id": id})
+    return await crud_delete("tice_projets", id)
+
 
 @app.on_event("startup")
 async def startup():
