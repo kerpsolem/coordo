@@ -229,6 +229,13 @@ export default function Tice() {
     progressRef.current = { id: p.id, rect, snapshot: { ...p } };
   };
 
+  // Status pill styles per mockup (light bg, colored text)
+  const STATUT_PILL = {
+    'À faire': 'bg-slate-100 text-slate-600 border-slate-200',
+    'En cours': 'bg-amber-50 text-amber-700 border-amber-200',
+    'Terminé': 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  };
+
   // --- Render ---
   const renderBar = (p) => {
     const debut = parseDate(p.date_debut);
@@ -238,42 +245,33 @@ export default function Tice() {
     const widthDays = Math.max(1, (fin.getTime() - debut.getTime()) / 86400000 + 1);
     const left = (leftDays * WEEK_W) / 7;
     const width = (widthDays * WEEK_W) / 7;
-    const color = STATUT_COLORS[p.statut] || 'bg-slate-400';
+    // Lighter Gantt bar color (vivid only on progress portion)
+    const isTermine = p.statut === 'Terminé';
+    const isEnCours = p.statut === 'En cours';
+    const baseBg = isTermine ? 'bg-emerald-400' : isEnCours ? 'bg-coral-300' : 'bg-slate-300';
+    const fillBg = isTermine ? 'bg-emerald-600' : isEnCours ? 'bg-coral-500' : 'bg-slate-500';
     const isChild = !!p.parent_id;
     return (
-      <div className="absolute top-1.5" style={{ left: `${left}px`, width: `${width}px`, height: '28px' }}>
+      <div className="absolute top-4" style={{ left: `${left}px`, width: `${width}px`, height: '42px' }}>
         <div
-          className={`relative h-full rounded ${color} ${isChild ? 'opacity-80' : 'shadow-sm'} cursor-grab hover:brightness-110 group`}
+          className={`relative h-full rounded-lg ${baseBg} ${isChild ? 'opacity-90' : 'shadow'} cursor-grab hover:brightness-105 group`}
           onMouseDown={(e) => onBarMouseDown(e, p, 'move')}
           onDoubleClick={() => startEdit(p)}
           title={`${p.titre} • ${p.date_debut} → ${p.date_fin} • ${p.progression}%`}
           data-testid={`gantt-bar-${p.id}`}
         >
-          {/* Progress fill */}
-          <div className="absolute inset-y-0 left-0 bg-black/20 rounded-l" style={{ width: `${p.progression || 0}%` }} />
+          {/* Progress fill (vivid) */}
+          <div className={`absolute inset-y-0 left-0 ${fillBg} rounded-l-lg`} style={{ width: `${p.progression || 0}%` }} />
           {/* Progress drag handle */}
-          <div className="absolute top-0 bottom-0 cursor-ew-resize" style={{ left: `calc(${p.progression || 0}% - 4px)`, width: '8px' }}
+          <div className="absolute top-0 bottom-0 cursor-ew-resize z-10" style={{ left: `calc(${p.progression || 0}% - 4px)`, width: '8px' }}
             onMouseDown={(e) => onProgressMouseDown(e, p)} title="Tirer pour ajuster la progression" />
           {/* Title */}
-          <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-semibold truncate pointer-events-none">
-            {p.statut === 'Terminé' && <span className="mr-1 text-white flex-shrink-0">✓</span>}
-            {p.titre} <span className="ml-1.5 opacity-80 text-[10px]">{p.progression || 0}%</span>
+          <div className="absolute inset-0 flex items-center px-3 text-[13px] text-white font-semibold truncate pointer-events-none z-0">
+            {isTermine && <span className="mr-1 flex-shrink-0">✓</span>}
+            {p.titre}{p.progression > 0 && <span className="ml-1.5 opacity-90 text-[11px]">— {p.progression}%</span>}
           </div>
-          {/* Mardis identifiés markers */}
-          {(p.mardis || []).map(t => {
-            const td = parseDate(t);
-            if (!td || !debut || !fin) return null;
-            if (td < debut || td > fin) return null;
-            const off = (td.getTime() - debut.getTime()) / 86400000;
-            const pct = (off / widthDays) * 100;
-            return (
-              <div key={t} className="absolute top-0 bottom-0 w-0.5 bg-yellow-300 pointer-events-none" style={{ left: `${pct}%` }} title={`Mardi ${td.toLocaleDateString('fr-FR')}`}>
-                <div className="absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full bg-yellow-300 border border-yellow-600" />
-              </div>
-            );
-          })}
           {/* Right resize handle */}
-          <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r"
+          <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r-lg z-10"
             onMouseDown={(e) => onBarMouseDown(e, p, 'resize-right')} title="Tirer pour allonger" />
         </div>
       </div>
@@ -283,29 +281,50 @@ export default function Tice() {
   const renderRow = (p, depth = 0) => {
     const subs = childrenOf(p.id);
     const isOpen = expandedParents[p.id] ?? true;
+    const demandeur = formateurs.find(f => f.id === p.formateur_demandeur_id);
+    const respTice = formateurs.find(f => f.id === p.formateur_tice_id);
     return (
       <React.Fragment key={p.id}>
-        <div className="flex border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/40" style={{ minHeight: '40px' }}>
-          {/* Left: title + actions */}
-          <div className="flex-shrink-0 w-[360px] border-r border-slate-200 dark:border-slate-700 px-2 py-1.5 flex items-center gap-1.5" style={{ paddingLeft: `${10 + depth * 16}px` }}>
+        <div className="flex border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/40 group relative" style={{ minHeight: '88px' }}>
+          {/* Left: title + meta + status + actions */}
+          <div className="flex-shrink-0 w-[320px] border-r border-slate-200 dark:border-slate-700 px-3 py-3 flex items-start gap-2" style={{ paddingLeft: `${12 + depth * 16}px` }}>
             {subs.length > 0 ? (
-              <button onClick={() => setExpandedParents(e => ({ ...e, [p.id]: !isOpen }))} className="w-4 text-slate-400 hover:text-slate-700">
+              <button onClick={() => setExpandedParents(e => ({ ...e, [p.id]: !isOpen }))} className="w-4 mt-1 text-slate-400 hover:text-slate-700 flex-shrink-0">
                 {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
-            ) : <span className="w-4" />}
-            <span className={`text-xs font-semibold truncate flex-1 ${p.archive ? 'line-through text-slate-400' : ''}`} title={p.titre}>{p.titre}</span>
-            <span className={`text-[9px] px-1.5 py-0.5 rounded text-white ${STATUT_COLORS[p.statut] || 'bg-slate-400'} flex-shrink-0`}>{p.statut}</span>
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100" >
-              <button onClick={() => startCreate(p.id)} className="text-slate-400 hover:text-coral-500 p-0.5" title="Ajouter sous-projet"><Plus size={12} /></button>
-              <button onClick={() => startEdit(p)} className="text-slate-400 hover:text-blue-500 p-0.5" title="Modifier"><Edit3 size={12} /></button>
+            ) : <span className="w-4 flex-shrink-0" />}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className={`text-sm font-bold text-slate-800 dark:text-slate-100 truncate ${p.archive ? 'line-through text-slate-400' : ''}`} title={p.titre}>{p.titre}</div>
+              {demandeur && <div className="text-[11px] text-slate-500 truncate">Demande : {demandeur.prenom} {demandeur.nom}</div>}
+              {respTice && <div className="text-[11px] text-coral-600 dark:text-coral-400 truncate">Resp. TICE : {respTice.prenom} {respTice.nom}</div>}
+              <div>
+                <span className={`inline-block text-[10px] px-2 py-0.5 rounded border font-medium ${STATUT_PILL[p.statut] || STATUT_PILL['À faire']}`}>{p.statut}</span>
+              </div>
+            </div>
+            {/* Action icons column (visible on hover) */}
+            <div className="flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+              <button onClick={() => startEdit(p)} className="text-slate-400 hover:text-blue-500 p-0.5" title="Modifier"><Edit3 size={14} /></button>
+              <button onClick={() => startCreate(p.id)} className="text-slate-400 hover:text-coral-500 p-0.5" title="Ajouter sous-projet"><Plus size={14} /></button>
               <button onClick={() => toggleArchive(p)} className="text-slate-400 hover:text-amber-500 p-0.5" title={p.archive ? 'Désarchiver' : 'Archiver'}>
-                {p.archive ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+                {p.archive ? <ArchiveRestore size={14} /> : <Archive size={14} />}
               </button>
-              <button onClick={() => remove(p.id)} className="text-slate-400 hover:text-red-500 p-0.5" title="Supprimer"><Trash2 size={12} /></button>
+              <button onClick={() => remove(p.id)} className="text-slate-400 hover:text-red-500 p-0.5" title="Supprimer"><Trash2 size={14} /></button>
             </div>
           </div>
           {/* Right: gantt area */}
           <div className="relative flex-1 overflow-hidden" style={{ minWidth: `${TOTAL_W}px` }}>
+            {/* Mardis identifiés markers — navy vertical bars across the whole row */}
+            {(p.mardis || []).map(t => {
+              const td = parseDate(t);
+              if (!td || !ganttFromMs) return null;
+              const offDays = (td.getTime() - ganttFromMs) / 86400000;
+              const x = (offDays * WEEK_W) / 7 + (WEEK_W / 14); // center within the day cell
+              if (x < 0) return null;
+              return (
+                <div key={t} className="absolute top-0 bottom-0 w-[3px] bg-[#0E1F36] pointer-events-none rounded-full"
+                  style={{ left: `${x}px` }} title={`Mardi ${td.toLocaleDateString('fr-FR')}`} />
+              );
+            })}
             {renderBar(p)}
           </div>
         </div>
