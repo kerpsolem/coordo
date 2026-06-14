@@ -400,53 +400,18 @@ export default function RecapHeures() {
                   return ia - ib;
                 });
                 // Build CSV export of displayed data
-                const exportCSV = () => {
-                  const sep = ';';
-                  const header = ['Promotion', 'Groupe', 'UE Code', 'UE Intitulé', 'Semestre', ...typeCols, 'TA', 'SIMU', 'Total'];
-                  const lines = [header.join(sep)];
-                  for (const r of displayRows) {
-                    for (const u of r.ues) {
-                      const row = [
-                        r.promotion_nom || '?',
-                        `G${r.groupe}`,
-                        u.ue_code,
-                        `"${(u.ue_intitule || '').replace(/"/g, '""')}"`,
-                        u.semestre || '',
-                        ...typeCols.map(t => (u.par_type?.[t] || 0).toFixed(2).replace('.', ',')),
-                        u.ta.toFixed(2).replace('.', ','),
-                        u.simu.toFixed(2).replace('.', ','),
-                        u.total.toFixed(2).replace('.', ','),
-                      ];
-                      lines.push(row.join(sep));
-                    }
-                  }
-                  const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `recap-heures-par-groupe-${dateDebut}_${dateFin}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                };
                 return (
                   <>
-                    {/* Filter bar: UE + Export */}
-                    <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 font-medium">UE :</span>
-                        <select value={filterUeGroupe} onChange={e => setFilterUeGroupe(e.target.value)}
-                          className="text-xs border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
-                          data-testid="filter-ue-groupe">
-                          <option value="all">Toutes les UE</option>
-                          {ues.map(u => <option key={u.id} value={u.id}>{u.code_ue} — {u.intitule}</option>)}
-                        </select>
-                        <span className="text-[10px] text-slate-400 ml-2">{displayRows.length} groupe{displayRows.length > 1 ? 's' : ''} affiché{displayRows.length > 1 ? 's' : ''}</span>
-                      </div>
-                      <button onClick={exportCSV}
-                        className="text-xs px-3 py-1.5 rounded bg-coral-50 text-coral-700 border border-coral-200 hover:bg-coral-100 font-medium"
-                        data-testid="export-csv-groupe">
-                        📥 Export CSV
-                      </button>
+                    {/* Filter bar: UE */}
+                    <div className="flex items-center gap-3 px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30">
+                      <span className="text-xs text-slate-500 font-medium">UE :</span>
+                      <select value={filterUeGroupe} onChange={e => setFilterUeGroupe(e.target.value)}
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
+                        data-testid="filter-ue-groupe">
+                        <option value="all">Toutes les UE</option>
+                        {ues.map(u => <option key={u.id} value={u.id}>{u.code_ue} — {u.intitule}</option>)}
+                      </select>
+                      <span className="text-[10px] text-slate-400 ml-2">{displayRows.length} groupe{displayRows.length > 1 ? 's' : ''} affiché{displayRows.length > 1 ? 's' : ''}</span>
                     </div>
                     <Table>
                     <TableHeader>
