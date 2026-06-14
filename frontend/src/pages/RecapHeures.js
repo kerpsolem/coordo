@@ -36,6 +36,8 @@ export default function RecapHeures() {
   const [groupeData, setGroupeData] = useState(null);
   const [expandedUe, setExpandedUe] = useState({});
   const [expandedGroupe, setExpandedGroupe] = useState({});
+  const [ues, setUes] = useState([]);
+  const [filterUeGroupe, setFilterUeGroupe] = useState('all');
 
   useEffect(() => {
     const today = new Date();
@@ -67,10 +69,11 @@ export default function RecapHeures() {
       const params2 = { date_debut: dd, date_fin: df };
       if (filterPromo !== 'all') params2.promotion_id = filterPromo;
       if (filterSemestre !== 'all') params2.semestre = filterSemestre;
-      const [recRes, fmRes, prRes, atRes, syRes, ueRes, grpRes] = await Promise.all([
+      const [recRes, fmRes, prRes, atRes, syRes, ueRes, grpRes, uesRes] = await Promise.all([
         API.get('/recap', { params }), API.get('/formateurs'), API.get('/promotions'), API.get('/activity-types'), API.get('/school-years'),
         API.get('/recap-ue', { params: params2 }),
-        API.get('/recap-groupe', { params: params2 })
+        API.get('/recap-groupe', { params: params2 }),
+        API.get('/ues')
       ]);
       setData(recRes.data);
       setFormateurs(fmRes.data);
@@ -79,6 +82,7 @@ export default function RecapHeures() {
       setSchoolYears(syRes.data);
       setUeData(ueRes.data);
       setGroupeData(grpRes.data);
+      setUes(uesRes.data);
       // Default to current school year on first load
       if (filterAnneeSco === 'all' && syRes.data?.length) {
         const today = new Date().toISOString().slice(0, 10);
@@ -372,8 +376,21 @@ export default function RecapHeures() {
           <Card>
             <CardContent className="p-0">
               {(() => {
+                // Filter rows by UE if selected
+                let displayRows = groupeData?.rows || [];
+                if (filterUeGroupe !== 'all') {
+                  displayRows = displayRows
+                    .map(r => ({ ...r, ues: r.ues.filter(u => u.ue_id === filterUeGroupe) }))
+                    .filter(r => r.ues.length > 0)
+                    .map(r => ({
+                      ...r,
+                      total: r.ues.reduce((s, u) => s + u.total, 0),
+                      total_ta: r.ues.reduce((s, u) => s + u.ta, 0),
+                      total_simu: r.ues.reduce((s, u) => s + u.simu, 0),
+                    }));
+                }
                 const allTypes = new Set();
-                (groupeData?.rows || []).forEach(r => r.ues.forEach(u => Object.keys(u.par_type || {}).forEach(t => allTypes.add(t))));
+                displayRows.forEach(r => r.ues.forEach(u => Object.keys(u.par_type || {}).forEach(t => allTypes.add(t))));
                 const ORDER = ['CM', 'CMO', 'TD', 'TP', 'TPG', 'EVAL', 'TA', 'SI', 'SIMU'];
                 const typeCols = [...allTypes].sort((a, b) => {
                   const ia = ORDER.indexOf(a); const ib = ORDER.indexOf(b);
@@ -382,8 +399,56 @@ export default function RecapHeures() {
                   if (ib === -1) return -1;
                   return ia - ib;
                 });
+                // Build CSV export of displayed data
+                const exportCSV = () => {
+                  const sep = ';';
+                  const header = ['Promotion', 'Groupe', 'UE Code', 'UE Intitulé', 'Semestre', ...typeCols, 'TA', 'SIMU', 'Total'];
+                  const lines = [header.join(sep)];
+                  for (const r of displayRows) {
+                    for (const u of r.ues) {
+                      const row = [
+                        r.promotion_nom || '?',
+                        `G${r.groupe}`,
+                        u.ue_code,
+                        `"${(u.ue_intitule || '').replace(/"/g, '""')}"`,
+                        u.semestre || '',
+                        ...typeCols.map(t => (u.par_type?.[t] || 0).toFixed(2).replace('.', ',')),
+                        u.ta.toFixed(2).replace('.', ','),
+                        u.simu.toFixed(2).replace('.', ','),
+                        u.total.toFixed(2).replace('.', ','),
+                      ];
+                      lines.push(row.join(sep));
+                    }
+                  }
+                  const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `recap-heures-par-groupe-${dateDebut}_${dateFin}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                };
                 return (
-                  <Table>
+                  <>
+                    {/* Filter bar: UE + Export */}
+                    <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 font-medium">UE :</span>
+                        <select value={filterUeGroupe} onChange={e => setFilterUeGroupe(e.target.value)}
+                          className="text-xs border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
+                          data-testid="filter-ue-groupe">
+                          <option value="all">Toutes les UE</option>
+                          {ues.map(u => <option key={u.id} value={u.id}>{u.code_ue} — {u.intitule}</option>)}
+                        </select>
+                        <span className="text-[10px] text-slate-400 ml-2">{displayRows.length} groupe{displayRows.length > 1 ? 's' : ''} affiché{displayRows.length > 1 ? 's' : ''}</span>
+                      </div>
+                      <button onClick={exportCSV}
+                        className="text-xs px-3 py-1.5 rounded bg-coral-50 text-coral-700 border border-coral-200 hover:bg-coral-100 font-medium"
+                        data-testid="export-csv-groupe">
+                        📥 Export CSV
+                      </button>
+                    </div>
+                    <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-xs">Promotion</TableHead>
@@ -396,7 +461,7 @@ export default function RecapHeures() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(groupeData?.rows || []).map((r, i) => {
+                      {displayRows.map((r, i) => {
                         const key = `${r.promotion_id || 'na'}-${r.groupe}`;
                         const open = expandedGroupe[key];
                         return (
@@ -482,11 +547,12 @@ export default function RecapHeures() {
                           </>
                         );
                       })}
-                      {(!groupeData?.rows || groupeData.rows.length === 0) && (
+                      {displayRows.length === 0 && (
                         <TableRow><TableCell colSpan={7} className="text-center text-sm text-slate-500 py-6">Aucune donnée sur cette période</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
+                  </>
                 );
               })()}
             </CardContent>
