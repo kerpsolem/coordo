@@ -86,6 +86,7 @@ Gérer plannings pédagogiques, charges des formateurs, répartition des cours, 
 - 2026-05 : **Iter4** Coordination Fiches Projets + Planning Global drag-déprogrammer + filtres + tooltip + Alertes refonte
 - 2026-05 : **Iter5** Drag activity → grid PlanningGlobal + sidebar pills par promo + visuel "à programmer" Fiches Projets
 - 2026-05 : **Iter6** Validation drop promo+semestre + sélecteur jours + toggle sidebar + nb_formateurs + multi-groupes + Récap UE détaillé (formule temps formateur)
+- 2026-06 : **TICE Gantt** module créé (sous-projets, mardis identifiés, drag/resize bars, drag progression). Refonte UI complète selon maquette (palette coral/cream/navy ajoutée à tailwind.config, en-tête clair, barres rondes durée+progression, badges pâles). Suppression du double Layout (ProtectedRoute enveloppe déjà).
 
 ## Architecture Notes
 - /app/backend/server.py : monolithique (à splitter)
