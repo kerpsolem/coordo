@@ -48,6 +48,22 @@ function parseDate(s) {
   return new Date(s + 'T00:00:00');
 }
 
+// Compute list of Tuesdays (ISO date 'yyyy-mm-dd') between date_debut and date_fin inclusive
+function getTuesdaysInRange(date_debut, date_fin) {
+  const d = parseDate(date_debut);
+  const e = parseDate(date_fin);
+  if (!d || !e || e < d) return [];
+  // Move d to the next Tuesday (day 2)
+  const cur = new Date(d);
+  while (cur.getDay() !== 2) cur.setDate(cur.getDate() + 1);
+  const out = [];
+  while (cur <= e) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 7);
+  }
+  return out;
+}
+
 export default function Tice() {
   const { isTice } = useAuth();
   const [projets, setProjets] = useState([]);
@@ -240,6 +256,19 @@ export default function Tice() {
           <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-semibold truncate pointer-events-none">
             {p.titre} <span className="ml-1.5 opacity-80 text-[10px]">{p.progression || 0}%</span>
           </div>
+          {/* Mardis identifiés markers */}
+          {(p.mardis || []).map(t => {
+            const td = parseDate(t);
+            if (!td || !debut || !fin) return null;
+            if (td < debut || td > fin) return null;
+            const off = (td.getTime() - debut.getTime()) / 86400000;
+            const pct = (off / widthDays) * 100;
+            return (
+              <div key={t} className="absolute top-0 bottom-0 w-0.5 bg-yellow-300 pointer-events-none" style={{ left: `${pct}%` }} title={`Mardi ${td.toLocaleDateString('fr-FR')}`}>
+                <div className="absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full bg-yellow-300 border border-yellow-600" />
+              </div>
+            );
+          })}
           {/* Right resize handle */}
           <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r"
             onMouseDown={(e) => onBarMouseDown(e, p, 'resize-right')} title="Tirer pour allonger" />
@@ -378,8 +407,32 @@ export default function Tice() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2"><Label>Semaine identifiée (ex: S24 - mardi 09/06)</Label>
-                  <Input value={editing.semaine_identifiee || ''} onChange={e => setEditing({ ...editing, semaine_identifiee: e.target.value })} placeholder="S24 - mardi 09/06/2026" />
+                <div className="col-span-2"><Label>Mardis identifiés (sélection multiple)</Label>
+                  {(() => {
+                    const tuesdays = getTuesdaysInRange(editing.date_debut, editing.date_fin);
+                    const sel = editing.mardis || [];
+                    if (tuesdays.length === 0) return <p className="text-xs text-slate-400 italic mt-1">Renseignez d'abord les dates de début et fin.</p>;
+                    return (
+                      <div className="flex flex-wrap gap-1.5 mt-1.5 max-h-32 overflow-y-auto p-2 rounded border border-slate-200 dark:border-slate-700" data-testid="tice-mardis">
+                        {tuesdays.map(t => {
+                          const checked = sel.includes(t);
+                          const d = parseDate(t);
+                          const w = isoWeek(d);
+                          return (
+                            <label key={t} className={`flex items-center gap-1 px-2 py-1 rounded border text-[11px] cursor-pointer ${checked ? 'bg-coral-100 border-coral-400 text-coral-700 font-semibold' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50'}`}>
+                              <input type="checkbox" className="w-3 h-3" checked={checked}
+                                onChange={e => {
+                                  const next = e.target.checked ? [...sel, t].sort() : sel.filter(x => x !== t);
+                                  setEditing({ ...editing, mardis: next });
+                                }} />
+                              S{w}·{d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                            </label>
+                          );
+                        })}
+                        {sel.length > 0 && <span className="text-[10px] text-slate-500 ml-auto self-center">{sel.length} mardi{sel.length > 1 ? 's' : ''} sélectionné{sel.length > 1 ? 's' : ''}</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
