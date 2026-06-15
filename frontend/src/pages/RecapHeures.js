@@ -206,7 +206,7 @@ export default function RecapHeures() {
         </CardContent></Card>
         <Card className="border-blue-200" data-testid="kpi-cours-assignees"><CardContent className="py-3">
           <p className="text-2xl font-bold text-blue-700" style={{ fontFamily: 'Outfit' }}>{workload?.total_cours_assignees?.toFixed(1) || '0'}h</p>
-          <p className="text-xs text-slate-500">Heures cours assignées <span className="text-[10px]">(durée × formateurs réels)</span></p>
+          <p className="text-xs text-slate-500">Heures cours assignées <span className="text-[10px]">(durée × formateurs réels ou prévus)</span></p>
         </CardContent></Card>
         <Card className={workload?.heures_a_pourvoir > 0 ? 'border-red-300 bg-red-50/30' : 'border-emerald-200'} data-testid="kpi-a-pourvoir"><CardContent className="py-3">
           <p className={`text-2xl font-bold ${workload?.heures_a_pourvoir > 0 ? 'text-red-600' : 'text-emerald-700'}`} style={{ fontFamily: 'Outfit' }}>{workload?.heures_a_pourvoir?.toFixed(1) || '0'}h</p>

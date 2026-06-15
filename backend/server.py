@@ -2112,10 +2112,10 @@ async def recap_groupe(promotion_id: Optional[str] = None, semestre: Optional[st
 async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] = None,
                    date_debut: Optional[str] = None, date_fin: Optional[str] = None):
     """Détail par UE :
-    - total d'heures programmées
+    - total d'heures programmées (sessions)
     - répartition par type d'activité
-    - temps formateur total selon la formule: heures × nb_formateurs × nb_groupes
-      (cumulé depuis sessions + activités de fiches projet non liées à une session).
+    - temps formateur total = Σ (heures × nb_formateurs) sur les sessions hors TPG.
+      Les activités de fiches projet non programmées sont ignorées pour éviter les doublons.
     """
     q = {}
     if date_debut and date_fin:
@@ -2131,7 +2131,6 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
         q["promotion_id"] = promotion_id
 
     sessions = await db.sessions.find(q, {"_id": 0}).to_list(5000)
-    fiches = await db.fiches_projet.find({}, {"_id": 0}).to_list(2000)
     ues_list = await crud_list("ues")
     ues_map = {u["id"]: u for u in ues_list}
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
@@ -2166,15 +2165,16 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
         tname = act_types.get(s.get("type_activite_id"), {}).get("nom", "?")
         formateur_ids = s.get("formateur_ids") or []
         nb_form_real = len(formateur_ids)
-        nb_form = max(1, nb_form_real)
-        # nb_groupes : 1 si pas de group_id ; >1 si group_id (par défaut 2). Si group_ids list -> len()
-        gids = s.get("group_ids") or ([s["group_id"]] if s.get("group_id") else [])
-        nb_groupes = max(1, len(gids)) if gids else 1
-        # Temps formateur : 0 si TPG (jamais compte) ou si aucun formateur n'est assigne
-        if tname == "TPG" or nb_form_real == 0:
+        nb_req = s.get("nb_formateurs_requis")
+        if nb_req is None:
+            nb_req = 0 if tname == "TPG" else (1 if act_types.get(s.get("type_activite_id"), {}).get("is_cours") else 0)
+        # Temps formateur = durée × max(formateurs réels, formateurs prévus)
+        # → couvre aussi les séances pas encore pourvues mais comptables.
+        nb_form_used = nb_form_real if nb_form_real > 0 else (nb_req or 0)
+        if tname == "TPG":
             tf = 0
         else:
-            tf = dur * nb_form * nb_groupes
+            tf = dur * nb_form_used
         bucket["total_heures"] += dur
         bucket["total_temps_formateur"] += tf
         bucket["par_type"][tname] = bucket["par_type"].get(tname, 0) + dur
@@ -2183,7 +2183,8 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
             "source": "session", "id": s.get("id"), "date": s.get("date"),
             "intitule": s.get("intitule") or "",
             "type": tname, "heures": dur, "nb_formateurs": nb_form_real,
-            "nb_groupes": nb_groupes, "temps_formateur": tf,
+            "nb_formateurs_requis": nb_req, "nb_formateurs_utilises": nb_form_used,
+            "nb_groupes": 1, "temps_formateur": tf,
         })
 
     # 2) Activités fiche projet (non liées à une session) : IGNORÉES.
@@ -2218,58 +2219,48 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
     sessions = await db.sessions.find(q, {"_id": 0}).to_list(2000)
     formateurs = await crud_list("formateurs")
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
-    fiches = await db.fiches_projet.find({}, {"_id": 0}).to_list(2000)
 
     # Formule unifiée avec /recap-ue (total_temps_formateur) :
-    # - total_temps_formateur = Σ (duree × nb_formateurs × nb_groupes) sur sessions + activités
-    #   de fiches projet non programmées. Inclut TOUS les types sauf TPG (alignement strict).
+    # - total_temps_formateur = Σ (duree × max(nb_formateurs_réels, nb_formateurs_requis))
+    #   sur sessions hors TPG. → couvre aussi les séances pas encore pourvues.
     # - capacite_totale = Σ quotité_i / 100 sur les formateurs actifs
     # - ref_i = total_temps_formateur × (quotité_i / 100) / capacite_totale
-    # - heures_par_formateur[fid] (cours) = Σ (duree × nb_groupes) où fid ∈ formateur_ids
-    #   ⇒ par construction, Σ heures_cours_par_formateur = total_temps_formateur.
-    # - heures_a_pourvoir = Σ max(0, nb_req − have) × duree × nb_groupes (par séance).
-    total_cours_h = 0.0           # Σ duree (1× par séance, hors TPG) — pour info
-    total_cours_requis_h = 0.0    # Σ duree × nb_req × nb_groupes (hors TPG)
-    total_temps_formateur_h = 0.0 # Σ duree × nb_form_réels × nb_groupes (= /recap-ue)
-    heures_a_pourvoir_h = 0.0     # déficits par séance × nb_groupes
-    heures_par_formateur = {}     # fid -> {cours, total, par_type}
-
-    def _nb_groupes(obj, is_session=True):
-        gids = obj.get("group_ids") or ([obj.get("group_id")] if obj.get("group_id") else [])
-        if gids:
-            return max(1, len([g for g in gids if g]))
-        if not is_session:
-            return _nb_groupes_from_taille(obj.get("taille_groupe", ""))
-        return 1
+    # - heures_par_formateur[fid] (cours) = Σ duree où fid ∈ formateur_ids (réel seulement).
+    # - heures_a_pourvoir = Σ max(0, nb_req − have) × duree (par séance).
+    total_cours_h = 0.0
+    total_cours_requis_h = 0.0
+    total_temps_formateur_h = 0.0
+    heures_a_pourvoir_h = 0.0
+    heures_par_formateur = {}
 
     for s in sessions:
-        # Aligné avec /recap-ue : on ignore les séances sans UE
         if not s.get("ue_id"):
             continue
         dur = float(s.get("duree", 0) or 0)
         tid = s.get("type_activite_id", "")
         at = act_types.get(tid, {})
         type_name = (at.get("nom") or "").strip().upper()
-        is_compte = type_name != "TPG"  # même règle que /recap-ue
+        is_compte = type_name != "TPG"
         nb_req = s.get("nb_formateurs_requis")
         if nb_req is None:
             nb_req = 0 if type_name == "TPG" else (1 if at.get("is_cours") else 0)
         have = len(s.get("formateur_ids") or [])
-        nb_groupes = _nb_groupes(s, True)
+        # Formateurs utilisés = réels si présents, sinon prévus (nb_req)
+        nb_form_used = have if have > 0 else (nb_req or 0)
         if is_compte:
             total_cours_h += dur
-            total_cours_requis_h += dur * (nb_req or 0) * nb_groupes
-            total_temps_formateur_h += dur * have * nb_groupes
+            total_cours_requis_h += dur * (nb_req or 0)
+            total_temps_formateur_h += dur * nb_form_used
             if nb_req and have < nb_req:
-                heures_a_pourvoir_h += dur * (nb_req - have) * nb_groupes
+                heures_a_pourvoir_h += dur * (nb_req - have)
         for fid in s.get("formateur_ids", []):
             if fid not in heures_par_formateur:
                 heures_par_formateur[fid] = {"cours": 0, "total": 0, "par_type": {}}
-            heures_par_formateur[fid]["total"] += dur * nb_groupes
+            heures_par_formateur[fid]["total"] += dur
             tname = at.get("nom", "")
-            heures_par_formateur[fid]["par_type"][tname] = heures_par_formateur[fid]["par_type"].get(tname, 0) + dur * nb_groupes
+            heures_par_formateur[fid]["par_type"][tname] = heures_par_formateur[fid]["par_type"].get(tname, 0) + dur
             if is_compte:
-                heures_par_formateur[fid]["cours"] += dur * nb_groupes
+                heures_par_formateur[fid]["cours"] += dur
 
     # 2) Activités de fiches projet non programmées : IGNORÉES.
     # Décision produit : éviter les doublons potentiels d'activités recréées dans plusieurs fiches.
