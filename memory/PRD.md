@@ -87,6 +87,7 @@ Gérer plannings pédagogiques, charges des formateurs, répartition des cours, 
 - 2026-05 : **Iter5** Drag activity → grid PlanningGlobal + sidebar pills par promo + visuel "à programmer" Fiches Projets
 - 2026-05 : **Iter6** Validation drop promo+semestre + sélecteur jours + toggle sidebar + nb_formateurs + multi-groupes + Récap UE détaillé (formule temps formateur)
 - 2026-06 : **TICE Gantt** module créé (sous-projets, mardis identifiés, drag/resize bars, drag progression). Refonte UI complète selon maquette (palette coral/cream/navy ajoutée à tailwind.config, en-tête clair, barres rondes durée+progression, badges pâles). Suppression du double Layout (ProtectedRoute enveloppe déjà).
+- 2026-06 : **nb_formateurs_requis** ajouté sur les séances (champ + auto-default selon type d'activité via flag `is_cours` de /administration, exception TPG=0). Refonte `/workload` (formule équitable : `ref_i = total_cours_requis × quotité_i / capacité_totale`). Alertes "Surcharge" maintenant déclenchées sur la période (écart > max(10%·ref, 5h) au lieu de l'ancien seuil >8.5h/jour). Page "Par formateur" : 4 KPI cards (Volume global, Volume théorique, Heures assignées, Écart). Recap heures : 5 KPI cards. Modale Session : input "Requis" + badge live "X / Y" (rouge incomplet, vert complet, ambre surnombre). Endpoint `/migrations/backfill-nb-formateurs-requis?recompute=true` pour ré-aligner les données existantes.
 
 ## Architecture Notes
 - /app/backend/server.py : monolithique (à splitter)

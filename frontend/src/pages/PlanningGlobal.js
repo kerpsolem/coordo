@@ -1143,9 +1143,10 @@ export default function PlanningGlobal() {
               <div><Label className="text-xs">Fin</Label><Input type="time" value={editSession.heure_fin||''} onChange={e=>setEditSession({...editSession,heure_fin:e.target.value})} className="h-8 text-sm" disabled={editSession.journee_entiere} /></div>
               <div><Label className="text-xs">Type</Label>
                 <Select value={editSession.type_activite_id||''} onValueChange={v=>{
-                  // Auto-fill nb_formateurs_requis from activity type when not set yet
+                  // Auto-fill nb_formateurs_requis depuis la config Administration → Types d'activités
+                  // Règle : TPG → 0 (exception), is_cours=true → 1, sinon → 0
                   const at = atMap[v] || actTypes.find(a => a.id === v) || {};
-                  const nm = (at.nom || '').toUpperCase();
+                  const nm = (at.nom || '').trim().toUpperCase();
                   const defReq = nm === 'TPG' ? 0 : (at.is_cours ? 1 : 0);
                   setEditSession(es => ({
                     ...es,

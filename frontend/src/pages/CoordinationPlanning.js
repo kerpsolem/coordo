@@ -421,8 +421,9 @@ export default function CoordinationPlanning() {
               <div>
                 <Label>Type</Label>
                 <Select value={editSession.type_activite_id || ''} onValueChange={v => {
+                  // Auto-fill depuis Administration → Types : TPG=0, is_cours=true → 1, sinon 0
                   const at = actTypes.find(a => a.id === v) || {};
-                  const nm = (at.nom || '').toUpperCase();
+                  const nm = (at.nom || '').trim().toUpperCase();
                   const defReq = nm === 'TPG' ? 0 : (at.is_cours ? 1 : 0);
                   setEditSession(es => ({
                     ...es,

@@ -338,17 +338,18 @@ async def list_sessions(request: Request, promotion_id: Optional[str] = None, fo
     return await crud_list("sessions", q, sort=[("date", 1), ("heure_debut", 1)])
 
 async def _default_nb_form_requis(type_activite_id: Optional[str]) -> int:
-    """Default required number of trainers based on activity type.
-    - TPG = 0 (autonomous group work, no trainer present)
-    - is_cours=True (TD/TP/CM/CMo/etc.) = 1
-    - Others = 0
+    """Default required number of trainers based on activity type from Administration:
+       - TPG → 0 (exception: travail personnel guidé sans formateur, même si is_cours=true)
+       - is_cours=true → 1
+       - otherwise → 0
+       Source of truth: the is_cours flag in /administration → Types d'activités.
     """
     if not type_activite_id:
         return 0
     at = await db.activity_types.find_one({"id": type_activite_id}, {"_id": 0})
     if not at:
         return 0
-    name = (at.get("nom") or "").upper()
+    name = (at.get("nom") or "").strip().upper()
     if name == "TPG":
         return 0
     return 1 if at.get("is_cours") else 0
@@ -2272,8 +2273,8 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
         is_cours = act_types.get(tid, {}).get("is_cours", False)
         nb_req = s.get("nb_formateurs_requis")
         if nb_req is None:
-            # Fallback: use type-based default if field missing on existing data
-            nm = (act_types.get(tid, {}).get("nom") or "").upper()
+            # Fallback: derive from activity-type admin config (TPG=0, is_cours=1, else=0)
+            nm = (act_types.get(tid, {}).get("nom") or "").strip().upper()
             nb_req = 0 if nm == "TPG" else (1 if is_cours else 0)
         if is_cours:
             total_cours_h += dur
@@ -2474,8 +2475,8 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
             continue
         nb_req = s.get("nb_formateurs_requis")
         if nb_req is None:
-            nm = (at.get("nom") or "").upper()
-            nb_req = 0 if nm == "TPG" else 1
+            nm = (at.get("nom") or "").strip().upper()
+            nb_req = 0 if nm == "TPG" else (1 if at.get("is_cours") else 0)
         total_cours_requis_h += dur * (nb_req or 0)
         for fid in (s.get("formateur_ids") or []):
             cours_hours_by_fid[fid] = cours_hours_by_fid.get(fid, 0) + dur
@@ -2505,29 +2506,29 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
 
 # ===================== MIGRATIONS =====================
 @api_router.post("/migrations/backfill-nb-formateurs-requis")
-async def backfill_nb_formateurs_requis(request: Request):
-    """Backfill nb_formateurs_requis on existing sessions:
-       - TPG → 0
-       - is_cours type → 1
-       - non-cours type → 0
-       Skips sessions that already have the field set.
+async def backfill_nb_formateurs_requis(request: Request, recompute: bool = False):
+    """Backfill nb_formateurs_requis on sessions based on /administration activity-type config:
+       - TPG → 0 (exception)
+       - is_cours=true → 1
+       - otherwise → 0
+       When recompute=true, overwrite ALL sessions (even those already set).
+       By default, only sessions missing the field are updated.
     """
     await require_admin(request)
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
-    cursor = db.sessions.find({"nb_formateurs_requis": {"$exists": False}}, {"_id": 0})
+    query = {} if recompute else {"nb_formateurs_requis": {"$exists": False}}
+    cursor = db.sessions.find(query, {"_id": 0})
     updated = 0
     async for s in cursor:
         at = act_types.get(s.get("type_activite_id"), {})
-        nm = (at.get("nom") or "").upper()
+        nm = (at.get("nom") or "").strip().upper()
         if nm == "TPG":
             nb = 0
-        elif at.get("is_cours"):
-            nb = 1
         else:
-            nb = 0
+            nb = 1 if at.get("is_cours") else 0
         await db.sessions.update_one({"id": s["id"]}, {"$set": {"nb_formateurs_requis": nb}})
         updated += 1
-    return {"updated": updated}
+    return {"updated": updated, "recompute": recompute}
 
 # ===================== SEED DATA =====================
 @api_router.post("/seed")
