@@ -2186,46 +2186,9 @@ async def recap_ue(promotion_id: Optional[str] = None, semestre: Optional[str] =
             "nb_groupes": nb_groupes, "temps_formateur": tf,
         })
 
-    # 2) Activités fiche projet (non liées à une session)
-    for f in fiches:
-        if promotion_id and f.get("promotion_id") and f.get("promotion_id") != promotion_id:
-            continue
-        if semestre and semestre not in ("pair", "impair") and f.get("semestre") and f.get("semestre") != semestre:
-            continue
-        uid = f.get("ue_id")
-        if not uid:
-            continue
-        for act in f.get("activites", []):
-            if act.get("session_id"):
-                continue  # already counted via sessions
-            dur = float(act.get("heures", 0) or 0)
-            if dur <= 0:
-                continue
-            tname = act_types.get(act.get("type_activite_id"), {}).get("nom", "?")
-            formateur_ids = act.get("formateur_ids") or []
-            nb_form_real = int(act.get("nb_formateurs") or len(formateur_ids) or 0)
-            nb_form = max(1, nb_form_real)
-            gids = act.get("group_ids") or []
-            if gids:
-                nb_groupes = max(1, len(gids))
-            else:
-                nb_groupes = _nb_groupes_from_taille(act.get("taille_groupe", ""))
-            # Temps formateur : 0 si TPG ou si aucun formateur
-            if tname == "TPG" or nb_form_real == 0:
-                tf = 0
-            else:
-                tf = dur * nb_form * nb_groupes
-            bucket = _ensure(uid)
-            bucket["total_heures"] += dur
-            bucket["total_temps_formateur"] += tf
-            bucket["par_type"][tname] = bucket["par_type"].get(tname, 0) + dur
-            bucket["par_type_tf"][tname] = bucket["par_type_tf"].get(tname, 0) + tf
-            bucket["details"].append({
-                "source": "fiche", "id": act.get("id"), "nom": act.get("nom", ""),
-                "intitule": act.get("nom", ""),
-                "type": tname, "heures": dur, "nb_formateurs": nb_form_real,
-                "nb_groupes": nb_groupes, "temps_formateur": tf,
-            })
+    # 2) Activités fiche projet (non liées à une session) : IGNORÉES.
+    # Décision produit : éviter les doublons potentiels d'activités recréées dans plusieurs fiches.
+    # Le récap reflète donc uniquement ce qui est *réellement programmé* en sessions.
 
     rows = sorted(by_ue.values(), key=lambda x: (x["domain_nom"] or "z", x["ue_code"]))
     return {
@@ -2308,51 +2271,9 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
             if is_compte:
                 heures_par_formateur[fid]["cours"] += dur * nb_groupes
 
-    # 2) Activités de fiches projet non liées à une session (volume prévu non encore programmé)
-    promo_filter = set(promotion_ids.split(",")) if promotion_ids else None
-    if semestre and semestre not in ("pair", "impair"):
-        sem_filter = {semestre}
-    elif semestre == "pair":
-        sem_filter = {"S2", "S4", "S6"}
-    elif semestre == "impair":
-        sem_filter = {"S1", "S3", "S5"}
-    else:
-        sem_filter = None
-    for f in fiches:
-        if not f.get("ue_id"):
-            continue  # aligné /recap-ue : on ignore les fiches sans UE
-        if promo_filter and f.get("promotion_id") and f.get("promotion_id") not in promo_filter:
-            continue
-        if sem_filter and f.get("semestre") and f.get("semestre") not in sem_filter:
-            continue
-        for act in f.get("activites", []):
-            if act.get("session_id"):
-                continue  # déjà compté via /sessions
-            dur = float(act.get("heures", 0) or 0)
-            if dur <= 0:
-                continue
-            tid = act.get("type_activite_id", "")
-            at = act_types.get(tid, {})
-            type_name = (at.get("nom") or "").strip().upper()
-            is_compte = type_name != "TPG"
-            formateur_ids = act.get("formateur_ids") or []
-            have = int(act.get("nb_formateurs") or len(formateur_ids) or 0)
-            nb_req = int(act.get("nb_formateurs") or 0) or (0 if type_name == "TPG" else (1 if at.get("is_cours") else 0))
-            nb_groupes = _nb_groupes(act, False)
-            if is_compte:
-                total_cours_h += dur
-                total_cours_requis_h += dur * (nb_req or 0) * nb_groupes
-                total_temps_formateur_h += dur * have * nb_groupes
-                if nb_req and have < nb_req:
-                    heures_a_pourvoir_h += dur * (nb_req - have) * nb_groupes
-            for fid in formateur_ids:
-                if fid not in heures_par_formateur:
-                    heures_par_formateur[fid] = {"cours": 0, "total": 0, "par_type": {}}
-                heures_par_formateur[fid]["total"] += dur * nb_groupes
-                tname = at.get("nom", "")
-                heures_par_formateur[fid]["par_type"][tname] = heures_par_formateur[fid]["par_type"].get(tname, 0) + dur * nb_groupes
-                if is_compte:
-                    heures_par_formateur[fid]["cours"] += dur * nb_groupes
+    # 2) Activités de fiches projet non programmées : IGNORÉES.
+    # Décision produit : éviter les doublons potentiels d'activités recréées dans plusieurs fiches.
+    # Le volume reflète donc uniquement ce qui est *réellement programmé* en sessions.
 
     # Capacity = total quotité across ALL active formateurs (not just those with sessions),
     # so reference reflects equitable distribution over the whole team.
