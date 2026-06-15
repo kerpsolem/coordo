@@ -2301,11 +2301,16 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
     if capacite_totale <= 0:
         capacite_totale = sum((f.get("quotite", 100) or 100) / 100.0 for f in formateurs) or 1.0
 
+    # Reference base = total_cours_assignees (real scheduled trainer-hours).
+    # By construction: sum(heures_cours per formateur) == total_cours_assignees_h.
+    # So distributing this total proportionally to quotité gives an equitable target.
+    base_ref = total_cours_assignees_h
+
     result = []
     for f in formateurs:
         fid = f["id"]
         quotite = (f.get("quotite", 100) or 100) / 100.0
-        ref = (total_cours_requis_h * quotite / capacite_totale) if capacite_totale > 0 else 0
+        ref = (base_ref * quotite / capacite_totale) if capacite_totale > 0 else 0
         h_data = heures_par_formateur.get(fid, {"cours": 0, "total": 0, "par_type": {}})
         heures = h_data["cours"]
         ecart = heures - ref

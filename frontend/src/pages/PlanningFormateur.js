@@ -175,15 +175,15 @@ export default function PlanningFormateur() {
                 <Card className="border-coral-200">
                   <CardContent className="py-3">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Volume global cours à pourvoir</p>
-                    <p className="text-2xl font-extrabold mt-1" style={{ fontFamily: 'Outfit' }}>{(workload.total_cours_requis ?? 0).toFixed(1)}h</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">heures formateur × nb requis · période</p>
+                    <p className="text-2xl font-extrabold mt-1" style={{ fontFamily: 'Outfit' }}>{(workload.total_cours_assignees ?? 0).toFixed(1)}h</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">durée × nb formateurs réels · période</p>
                   </CardContent>
                 </Card>
                 <Card className="border-blue-200">
                   <CardContent className="py-3">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Volume théorique du formateur</p>
                     <p className="text-2xl font-extrabold mt-1 text-blue-700" style={{ fontFamily: 'Outfit' }}>{ref.toFixed(1)}h</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">selon quotité {selectedFm?.quotite || 100}%</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">volume global × quotité {selectedFm?.quotite || 100}% / capacité totale</p>
                   </CardContent>
                 </Card>
                 <Card className="border-emerald-200">
