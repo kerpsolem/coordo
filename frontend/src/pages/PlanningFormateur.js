@@ -196,7 +196,7 @@ export default function PlanningFormateur() {
                 <Card className={statut === 'surcharge' ? 'border-red-300 bg-red-50/40 dark:bg-red-900/10' : statut === 'sous-charge' ? 'border-blue-300 bg-blue-50/40 dark:bg-blue-900/10' : 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-900/10'}>
                   <CardContent className="py-3">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Écart</p>
-                    <p className={`text-2xl font-extrabold mt-1 ${ecart > 0 ? 'text-red-600' : ecart < 0 ? 'text-blue-600' : 'text-emerald-700'}`} style={{ fontFamily: 'Outfit' }}>
+                    <p className={`text-2xl font-extrabold mt-1 ${statut === 'surcharge' ? 'text-red-600' : statut === 'sous-charge' ? 'text-blue-600' : 'text-emerald-700'}`} style={{ fontFamily: 'Outfit' }}>
                       {ecart > 0 ? '+' : ''}{ecart.toFixed(1)}h
                     </p>
                     <p className={`text-[10px] mt-0.5 capitalize font-semibold ${statut === 'surcharge' ? 'text-red-600' : statut === 'sous-charge' ? 'text-blue-600' : 'text-emerald-700'}`}>{statut}</p>

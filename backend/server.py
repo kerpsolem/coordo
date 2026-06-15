@@ -2263,9 +2263,12 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
     # - ref_i = total_cours_requis_h × (quotité_i / 100) / capacite_totale
     # - heures_assignées_i = sum(duree of cours sessions where i in formateur_ids)
     # - ecart_i = heures_assignées_i - ref_i  (positive = surcharge)
+    # - heures_a_pourvoir = sum(max(0, nb_req - have) × duree)  computed PER SESSION,
+    #   never compensated by over-staffed sessions.
     total_cours_h = 0.0           # sum of durations of cours sessions (1 per session)
     total_cours_requis_h = 0.0    # sum(duree × nb_formateurs_requis) over cours sessions
     total_cours_assignees_h = 0.0 # sum(duree × len(formateur_ids)) over cours sessions
+    heures_a_pourvoir_h = 0.0     # sum(max(0, nb_req - have) × duree) per session
     heures_par_formateur = {}     # fid -> {cours, total, par_type}
     for s in sessions:
         dur = s.get("duree", 0) or 0
@@ -2276,10 +2279,13 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
             # Fallback: derive from activity-type admin config (TPG=0, is_cours=1, else=0)
             nm = (act_types.get(tid, {}).get("nom") or "").strip().upper()
             nb_req = 0 if nm == "TPG" else (1 if is_cours else 0)
+        have = len(s.get("formateur_ids") or [])
         if is_cours:
             total_cours_h += dur
             total_cours_requis_h += dur * (nb_req or 0)
-            total_cours_assignees_h += dur * len(s.get("formateur_ids") or [])
+            total_cours_assignees_h += dur * have
+            if nb_req and have < nb_req:
+                heures_a_pourvoir_h += dur * (nb_req - have)
         for fid in s.get("formateur_ids", []):
             if fid not in heures_par_formateur:
                 heures_par_formateur[fid] = {"cours": 0, "total": 0, "par_type": {}}
@@ -2330,7 +2336,7 @@ async def workload(date_debut: Optional[str] = None, date_fin: Optional[str] = N
         "total_cours_global": round(total_cours_h, 2),
         "total_cours_requis": round(total_cours_requis_h, 2),
         "total_cours_assignees": round(total_cours_assignees_h, 2),
-        "heures_a_pourvoir": round(max(0.0, total_cours_requis_h - total_cours_assignees_h), 2),
+        "heures_a_pourvoir": round(heures_a_pourvoir_h, 2),
         "capacite_totale": round(capacite_totale, 2),
     }
 
