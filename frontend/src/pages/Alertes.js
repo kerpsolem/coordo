@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
-import { AlertTriangle, AlertCircle, BarChart3, UserX, CalendarX, Pin, RefreshCw, Check, Filter } from 'lucide-react';
+import { AlertTriangle, AlertCircle, BarChart3, UserX, CalendarX, Pin, RefreshCw, Check, Filter, Users } from 'lucide-react';
 import { format, startOfWeek, addDays } from 'date-fns';
 
 const CATEGORIES = [
@@ -13,6 +13,7 @@ const CATEGORIES = [
   { id: 'chevauchement', label: 'Chevauchement', icon: AlertTriangle, color: 'amber' },
   { id: 'surcharge', label: 'Surcharge', icon: BarChart3, color: 'fuchsia' },
   { id: 'sans_formateur', label: 'Sans formateur', icon: UserX, color: 'red' },
+  { id: 'incomplet', label: 'Séance incomplète', icon: Users, color: 'orange' },
   { id: 'conflit_absence', label: 'Conflit absence', icon: CalendarX, color: 'rose' },
   { id: 'autre', label: 'Autre', icon: Pin, color: 'slate' },
 ];
@@ -22,6 +23,7 @@ const COLOR_BG = {
   red: 'bg-red-50 border-red-300 text-red-800',
   rose: 'bg-rose-50 border-rose-300 text-rose-800',
   fuchsia: 'bg-fuchsia-50 border-fuchsia-300 text-fuchsia-800',
+  orange: 'bg-orange-50 border-orange-300 text-orange-800',
   slate: 'bg-slate-50 border-slate-300 text-slate-700',
 };
 const ICON_COLOR = {
@@ -29,6 +31,7 @@ const ICON_COLOR = {
   red: 'text-red-500',
   rose: 'text-rose-500',
   fuchsia: 'text-fuchsia-500',
+  orange: 'text-orange-500',
   slate: 'text-slate-500',
 };
 

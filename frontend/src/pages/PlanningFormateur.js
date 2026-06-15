@@ -190,7 +190,7 @@ export default function PlanningFormateur() {
                   <CardContent className="py-3">
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Heures réellement assignées (cours)</p>
                     <p className="text-2xl font-extrabold mt-1 text-emerald-700" style={{ fontFamily: 'Outfit' }}>{heuresAss.toFixed(1)}h</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">cours seuls · hors EVAL/SI/Stage</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">selon types « en cours » dans /administration</p>
                   </CardContent>
                 </Card>
                 <Card className={statut === 'surcharge' ? 'border-red-300 bg-red-50/40 dark:bg-red-900/10' : statut === 'sous-charge' ? 'border-blue-300 bg-blue-50/40 dark:bg-blue-900/10' : 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-900/10'}>

@@ -2355,8 +2355,12 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
         return nom
 
     alerts = []
-    # 1) Sans formateur
+    act_types_map = {a["id"]: a for a in await crud_list("activity_types")}
+    # 1) Sans formateur / Affectation incomplète
     for s in sessions:
+        at = act_types_map.get(s.get("type_activite_id"), {})
+        is_cours = bool(at.get("is_cours"))
+        type_name = (at.get("nom") or "").strip().upper()
         if not s.get("formateur_ids"):
             alerts.append({
                 "type": "error", "category": "sans_formateur",
@@ -2367,6 +2371,25 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
                 "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
                 "auto": True,
             })
+        else:
+            # Séance « cours » partiellement pourvue (nb formateurs < nb requis)
+            # Exclu : TPG (par convention, requis = 0).
+            nb_req = s.get("nb_formateurs_requis")
+            if nb_req is None:
+                nb_req = 0 if type_name == "TPG" else (1 if is_cours else 0)
+            have = len(s.get("formateur_ids") or [])
+            if is_cours and type_name != "TPG" and nb_req and have < nb_req:
+                manque = nb_req - have
+                act_label = at.get("nom", "Cours")
+                alerts.append({
+                    "type": "warning", "category": "incomplet",
+                    "title": "Séance partiellement pourvue",
+                    "message": f"« {s.get('intitule') or act_label} » : {have} formateur(s) sur {nb_req} requis (manque {manque}).",
+                    "context": promo_label(s.get("promotion_id")),
+                    "session_id": s.get("id"), "date": s.get("date"),
+                    "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
+                    "auto": True,
+                })
         if not s.get("ue_id"):
             alerts.append({
                 "type": "warning", "category": "autre",
@@ -2390,7 +2413,6 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
 
     # 2) Chevauchements (overlap entre 2 séances pour le même formateur)
     # Exclu : type TPG (temps personnel groupe : formateur non en activite d'enseignement)
-    act_types_map = {a["id"]: a for a in await crud_list("activity_types")}
     def _is_tpg(sess):
         return (act_types_map.get(sess.get("type_activite_id"), {}).get("nom", "") or "").upper() == "TPG"
 
