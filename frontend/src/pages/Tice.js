@@ -119,6 +119,15 @@ export default function Tice() {
       if (d.mode === 'move') {
         next.date_debut = fmtDate(new Date(d.origDebut.getTime() + daysDelta * 86400000));
         next.date_fin   = fmtDate(new Date(d.origFin.getTime()   + daysDelta * 86400000));
+        // Décaler aussi les mardis sélectionnés du même nombre de jours (multiples de 7 → restent des mardis)
+        if (Array.isArray(d.snapshot.mardis) && d.snapshot.mardis.length > 0) {
+          const shiftDays = Math.round(daysDelta / 7) * 7;
+          next.mardis = d.snapshot.mardis.map(t => {
+            const dt = parseDate(t);
+            if (!dt) return t;
+            return fmtDate(new Date(dt.getTime() + shiftDays * 86400000));
+          });
+        }
       } else if (d.mode === 'resize-right') {
         const newFin = new Date(d.origFin.getTime() + daysDelta * 86400000);
         if (newFin >= d.origDebut) next.date_fin = fmtDate(newFin);
