@@ -200,13 +200,12 @@ export default function Dashboard() {
       {/* Charts: Heures par promotion + Repartition par type */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par promotion / par étudiant</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par étudiant</CardTitle></CardHeader>
           <CardContent>
             {data?.heures_par_promotion && Object.keys(data.heures_par_promotion).length > 0 ? (
               <div className="space-y-1">
                 <div className="flex items-center text-[10px] uppercase tracking-wide text-slate-400 font-semibold pb-1 border-b border-slate-200">
                   <span className="flex-1">Promotion</span>
-                  <span className="w-20 text-right">Total promo</span>
                   <span className="w-24 text-right">Par étudiant</span>
                 </div>
                 {Object.entries(data.heures_par_promotion).map(([promo, h]) => {
@@ -214,12 +213,11 @@ export default function Dashboard() {
                   return (
                     <div key={promo} className="flex items-center text-sm py-0.5">
                       <span className="flex-1 text-slate-700 dark:text-slate-200 truncate">{promo}</span>
-                      <span className="w-20 text-right font-semibold">{h.toFixed(1)}h</span>
                       <span className="w-24 text-right font-semibold text-coral-700">{hStu.toFixed(1)}h</span>
                     </div>
                   );
                 })}
-                <p className="text-[10px] text-slate-400 italic pt-1">Par étudiant : Σ heures par groupe ÷ nb de groupes de la promo.</p>
+                <p className="text-[10px] text-slate-400 italic pt-1">Σ heures par groupe ÷ nb de groupes de la promo.</p>
               </div>
             ) : <p className="text-sm text-slate-500">Aucune donnee</p>}
           </CardContent>
