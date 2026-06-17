@@ -428,6 +428,8 @@ export default function PlanningGlobal() {
     const sGroupIds = s.group_ids || (s.group_id ? [s.group_id] : []);
     const grpLabel = sGroupIds.map(gid => grpMap[gid]?.libelle).filter(Boolean).join(', ');
     const formInits = (s.formateur_ids || []).map(fid => fmMap[fid]?.initiales || '?').join(', ');
+    const sSiteIds = s.site_ids || (s.site_id ? [s.site_id] : []);
+    const siteLabel = sSiteIds.map(sid => siteMap[sid]?.nom).filter(Boolean).join(', ');
     const isDragging = dragInfo?.sessionId === s.id;
     const fontInit = Math.round(11 * zoom);
 
@@ -472,6 +474,12 @@ export default function PlanningGlobal() {
         {s.intitule && <div className="truncate text-slate-700 dark:text-slate-200 font-medium" style={{ fontSize: baseFontSmall + 1 }}>{s.intitule}</div>}
         <div className="text-slate-500 truncate" style={{ fontSize: baseFontSmall }} title={`${s.heure_debut}-${s.heure_fin}${grpLabel ? ' · ' + grpLabel : ''}`}>{s.heure_debut}-{s.heure_fin}{grpLabel ? ` · ${grpLabel}` : ''}</div>
         <div className="font-bold text-blue-700 dark:text-blue-300 truncate" style={{ fontSize: fontInit }} title={formInits}>{formInits}</div>
+        {siteLabel && (
+          <div className="flex items-center gap-0.5 text-slate-600 dark:text-slate-400 truncate" style={{ fontSize: baseFontSmall }} title={siteLabel}>
+            <MapPin size={baseFontSmall} className="flex-shrink-0" />
+            <span className="truncate">{siteLabel}</span>
+          </div>
+        )}
         {s.commentaire && (
           <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 truncate" style={{ fontSize: baseFontSmall - 1 }}>
             <MessageSquare size={baseFontSmall - 1} />{s.commentaire}
