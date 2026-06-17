@@ -422,8 +422,12 @@ async def create_session(request: Request):
 
 @api_router.put("/sessions/{id}")
 async def update_session(id: str, request: Request):
-    await require_admin(request)
+    u = await require_admin_or_secretariat(request)
     b = await request.json()
+    # Si secretariat (non admin), on n'accepte que la modif de "saisi" et "site_ids"
+    if u.get("role") == "secretariat":
+        allowed = {"saisi", "site_ids"}
+        b = {k: v for k, v in b.items() if k in allowed}
     if b.get("ue_id"):
         ue = await db.ues.find_one({"id": b["ue_id"]}, {"_id": 0})
         if ue:

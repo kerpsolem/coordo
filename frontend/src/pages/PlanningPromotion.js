@@ -6,11 +6,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, addWeeks, addDays, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function PlanningPromotion() {
+  const { isAdmin, isSecretariat } = useAuth();
+  const canEdit = isAdmin || isSecretariat;
   const [promotions, setPromotions] = useState([]);
   const [selectedPromo, setSelectedPromo] = useState('');
   const [sessions, setSessions] = useState([]);
@@ -18,7 +22,10 @@ export default function PlanningPromotion() {
   const [formateurs, setFormateurs] = useState([]);
   const [ues, setUes] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [sites, setSites] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -31,7 +38,27 @@ export default function PlanningPromotion() {
     API.get('/formateurs').then(r => setFormateurs(r.data));
     API.get('/ues').then(r => setUes(r.data));
     API.get('/groups').then(r => setGroups(r.data));
+    API.get('/sites').then(r => setSites(r.data));
   }, []);
+
+  const openEdit = (s) => {
+    if (!canEdit) return;
+    setEditing({ ...s, site_ids: s.site_ids || (s.site_id ? [s.site_id] : []), saisi: !!s.saisi });
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      // secretariat ne peut toggle saisi que sur séances 'Valide' (sécurité côté back déjà mais soyons cohérents)
+      const payload = { saisi: editing.saisi, site_ids: editing.site_ids };
+      await API.put(`/sessions/${editing.id}`, payload);
+      setEditing(null);
+      fetchSessions();
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally { setSaving(false); }
+  };
 
   const fetchSessions = useCallback(async () => {
     if (!selectedPromo) return;
@@ -110,11 +137,21 @@ export default function PlanningPromotion() {
                         {daySessions.map(s => {
                           const at = atMap[s.type_activite_id] || {};
                           return (
-                            <div key={s.id} className="p-1.5 rounded text-[10px] border" style={{ backgroundColor: (at.couleur || '#94a3b8') + '20', borderColor: at.couleur || '#94a3b8' }}>
-                              <div className="font-semibold" style={{ color: at.couleur }}>{at.nom}</div>
+                            <div key={s.id}
+                                 className={`p-1.5 rounded text-[10px] border ${canEdit ? 'cursor-pointer hover:ring-2 hover:ring-coral-400 transition' : ''}`}
+                                 style={{ backgroundColor: (at.couleur || '#94a3b8') + '20', borderColor: at.couleur || '#94a3b8' }}
+                                 onClick={() => openEdit(s)}
+                                 data-testid={`prom-session-${s.id}`}>
+                              <div className="font-semibold flex items-center justify-between" style={{ color: at.couleur }}>
+                                <span>{at.nom}</span>
+                                {s.saisi && <span className="text-emerald-700 text-[9px] font-bold">✓ saisi</span>}
+                              </div>
                               <div className="text-slate-600 dark:text-slate-400">{s.heure_debut}-{s.heure_fin}</div>
                               <div className="font-bold text-black dark:text-white">{(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).join(', ')}</div>
                               {s.intitule && <div className="truncate">{s.intitule}</div>}
+                              {(s.site_ids?.length > 0 || s.site_id) && (
+                                <div className="text-[9px] text-slate-500 truncate">📍 {(s.site_ids || [s.site_id]).map(sid => sites.find(x => x.id === sid)?.nom).filter(Boolean).join(', ')}</div>
+                              )}
                             </div>
                           );
                         })}
@@ -157,10 +194,15 @@ export default function PlanningPromotion() {
                   <TableHead className="text-xs">Type</TableHead><TableHead className="text-xs">Intitule</TableHead>
                   <TableHead className="text-xs">UE</TableHead><TableHead className="text-xs">Formateurs</TableHead>
                   <TableHead className="text-xs">Groupe</TableHead>
+                  <TableHead className="text-xs">Salles</TableHead>
+                  <TableHead className="text-xs text-center">Saisi</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {sessions.map(s => (
-                    <TableRow key={s.id} className="text-xs">
+                    <TableRow key={s.id}
+                              className={`text-xs ${canEdit ? 'cursor-pointer hover:bg-coral-50' : ''}`}
+                              onClick={() => openEdit(s)}
+                              data-testid={`prom-row-${s.id}`}>
                       <TableCell>{s.date}</TableCell>
                       <TableCell>{s.heure_debut}-{s.heure_fin}</TableCell>
                       <TableCell>{atMap[s.type_activite_id]?.nom}</TableCell>
@@ -168,6 +210,12 @@ export default function PlanningPromotion() {
                       <TableCell>{ueMap[s.ue_id]?.code_ue}</TableCell>
                       <TableCell className="font-bold">{(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).join(', ')}</TableCell>
                       <TableCell>{grpMap[s.group_id]?.libelle || '-'}</TableCell>
+                      <TableCell>{(s.site_ids || (s.site_id ? [s.site_id] : [])).map(sid => sites.find(x => x.id === sid)?.nom).filter(Boolean).join(', ') || '-'}</TableCell>
+                      <TableCell className="text-center">
+                        {s.saisi
+                          ? <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold text-[10px]">Oui</span>
+                          : <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">Non</span>}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -176,6 +224,59 @@ export default function PlanningPromotion() {
           </Card>
         </>
       )}
+
+      {/* Edit dialog */}
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Modifier la séance</DialogTitle></DialogHeader>
+          {editing && (
+            <div className="space-y-3">
+              <div className="text-sm text-slate-600 border-b pb-2">
+                <div><strong>{atMap[editing.type_activite_id]?.nom}</strong> · {editing.intitule || ueMap[editing.ue_id]?.code_ue || '—'}</div>
+                <div className="text-xs">{editing.date} · {editing.heure_debut}–{editing.heure_fin}</div>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded border bg-slate-50">
+                <Label className="text-sm">Saisi (validation administrative)</Label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4" checked={!!editing.saisi}
+                         onChange={e => setEditing({ ...editing, saisi: e.target.checked })}
+                         data-testid="edit-saisi" />
+                  <span className={`text-xs font-semibold ${editing.saisi ? 'text-emerald-700' : 'text-slate-500'}`}>
+                    {editing.saisi ? 'Oui' : 'Non'}
+                  </span>
+                </label>
+              </div>
+              <div>
+                <Label className="text-sm flex items-center gap-1"><MapPin size={14} /> Salles prévues</Label>
+                <div className="flex flex-wrap gap-1.5 mt-1.5 p-2 rounded border max-h-40 overflow-y-auto" data-testid="edit-sites">
+                  {sites.length === 0 && <span className="text-xs text-slate-400 italic">Aucun site disponible</span>}
+                  {sites.map(site => {
+                    const checked = (editing.site_ids || []).includes(site.id);
+                    return (
+                      <label key={site.id} className={`flex items-center gap-1 px-2 py-1 rounded border text-xs cursor-pointer ${checked ? 'bg-coral-100 border-coral-400 text-coral-700 font-semibold' : 'border-slate-200 hover:bg-slate-50'}`}>
+                        <input type="checkbox" className="w-3 h-3" checked={checked}
+                          onChange={e => {
+                            const next = e.target.checked
+                              ? [...(editing.site_ids || []), site.id]
+                              : (editing.site_ids || []).filter(x => x !== site.id);
+                            setEditing({ ...editing, site_ids: next });
+                          }} />
+                        {site.nom}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Annuler</Button>
+            <Button onClick={saveEdit} disabled={saving} className="bg-coral-500 hover:bg-coral-600 text-white" data-testid="edit-save">
+              {saving ? 'Sauvegarde…' : 'Enregistrer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
