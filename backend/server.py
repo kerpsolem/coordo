@@ -1721,10 +1721,15 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
     promotions = {p["id"]: p for p in await crud_list("promotions")}
     formateurs = {f["id"]: f for f in await crud_list("formateurs")}
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
+    groups_all = await crud_list("groups")
+    # Nb de groupes par promotion (pour calculer la moyenne par étudiant)
+    nb_groupes_par_promo = {}
+    for g in groups_all:
+        pid = g.get("promotion_id")
+        if pid: nb_groupes_par_promo[pid] = nb_groupes_par_promo.get(pid, 0) + 1
 
     heures_par_promo = {}
-    heures_par_etudiant = {}  # un étudiant = sum unique timeslots (date+heure) par promo
-    seen_slots = {}  # promo_id -> set of (date, heure_debut, heure_fin)
+    heures_par_groupe = {}  # (promotion_id, group_id) -> heures
     heures_par_formateur = {}
     heures_par_type = {}
     for s in sessions:
@@ -1732,20 +1737,36 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
         pname = promotions.get(pid, {}).get("nom", "Inconnu")
         dur = s.get("duree", 0)
         heures_par_promo[pname] = heures_par_promo.get(pname, 0) + dur
-        # Heures par étudiant : un étudiant ne peut être qu'à un seul endroit à un moment donné,
-        # donc on dédoublonne les créneaux parallèles (TD/TP en sous-groupes simultanés).
-        slot_key = (s.get("date"), s.get("heure_debut"), s.get("heure_fin"))
-        if pname not in seen_slots:
-            seen_slots[pname] = set()
-        if slot_key not in seen_slots[pname]:
-            seen_slots[pname].add(slot_key)
-            heures_par_etudiant[pname] = heures_par_etudiant.get(pname, 0) + dur
+        # Heures par groupe : on attribue la durée à chaque group_id couvert par la séance.
+        # Si aucun group_id, on considère que TOUS les groupes de la promo sont concernés.
+        gids = s.get("group_ids") or ([s["group_id"]] if s.get("group_id") else [])
+        if gids:
+            for gid in gids:
+                heures_par_groupe[(pid, gid)] = heures_par_groupe.get((pid, gid), 0) + dur
+        else:
+            # CM/CMo « promotion entière » : on l'attribue à tous les groupes de la promo
+            for g in groups_all:
+                if g.get("promotion_id") == pid:
+                    heures_par_groupe[(pid, g["id"])] = heures_par_groupe.get((pid, g["id"]), 0) + dur
         tid = s.get("type_activite_id", "")
         tname = act_types.get(tid, {}).get("nom", "Inconnu")
         heures_par_type[tname] = heures_par_type.get(tname, 0) + dur
         for fid in s.get("formateur_ids", []):
             fname = f"{formateurs.get(fid, {}).get('prenom', '')} {formateurs.get(fid, {}).get('nom', '')}"
             heures_par_formateur[fname] = heures_par_formateur.get(fname, 0) + dur
+
+    # Heures par étudiant = moyenne des heures par groupe au sein de la promo.
+    # = Σ heures_par_groupe (sur la promo) / nb_groupes_de_la_promo
+    heures_par_etudiant = {}
+    for pid, p in promotions.items():
+        pname = p.get("nom", "Inconnu")
+        nb_gr = nb_groupes_par_promo.get(pid, 0)
+        if nb_gr == 0:
+            # Pas de groupes définis → on prend le total promo (chaque étudiant attend tout)
+            heures_par_etudiant[pname] = heures_par_promo.get(pname, 0)
+        else:
+            total_grp = sum(v for (pp, _g), v in heures_par_groupe.items() if pp == pid)
+            heures_par_etudiant[pname] = round(total_grp / nb_gr, 2)
 
     abs_query = {"$or": [
         {"date_fin": {"$gte": date_debut}},

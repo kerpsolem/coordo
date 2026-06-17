@@ -219,7 +219,7 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
-                <p className="text-[10px] text-slate-400 italic pt-1">Par étudiant : créneaux parallèles (TD/TP simultanés) comptés une seule fois.</p>
+                <p className="text-[10px] text-slate-400 italic pt-1">Par étudiant : Σ heures par groupe ÷ nb de groupes de la promo.</p>
               </div>
             ) : <p className="text-sm text-slate-500">Aucune donnee</p>}
           </CardContent>

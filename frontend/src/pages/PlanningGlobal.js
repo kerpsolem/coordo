@@ -976,10 +976,10 @@ export default function PlanningGlobal() {
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Button variant={selectedPromos.size === 0 ? "default" : "outline"} size="sm" className="h-8 text-xs"
+        <Button variant={selectedPromos.size === 0 ? "default" : "outline"} size="sm" className={`h-8 text-xs ${selectedPromos.size === 0 ? 'filter-active' : ''}`}
           onClick={() => setSelectedPromos(new Set())} data-testid="filter-promo-all">Toutes</Button>
         {promotions.map(p => (
-          <Button key={p.id} size="sm" className="h-8 text-xs" variant={selectedPromos.has(p.id) ? "default" : "outline"}
+          <Button key={p.id} size="sm" className={`h-8 text-xs ${selectedPromos.has(p.id) ? 'filter-active' : ''}`} variant={selectedPromos.has(p.id) ? "default" : "outline"}
             onClick={() => { const n = new Set(selectedPromos); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); setSelectedPromos(n); }}
             data-testid={`filter-promo-${p.id}`}>{p.nom.replace('Promotion ', '')}</Button>
         ))}
@@ -1033,7 +1033,7 @@ export default function PlanningGlobal() {
                 });
               }}
               className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors
-                ${active ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
+                ${active ? 'filter-active' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'}`}
               data-testid={`day-toggle-${i}`}>
               {label}
             </button>
