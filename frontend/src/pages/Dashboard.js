@@ -14,6 +14,8 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [period, setPeriod] = useState('semaine');
   const [weekNum, setWeekNum] = useState(getWeek(new Date(), { weekStartsOn: 1 }));
+  const [monthIdx, setMonthIdx] = useState(new Date().getMonth()); // 0-11
+  const [yearNum, setYearNum] = useState(new Date().getFullYear());
   const [filterPromo, setFilterPromo] = useState('all');
   const [filterSemestre, setFilterSemestre] = useState('all');
   const [filterAnneeSco, setFilterAnneeSco] = useState('all');
@@ -38,22 +40,29 @@ export default function Dashboard() {
     const today = new Date();
     let dateDebut, dateFin;
 
-    const selectedSY = filterAnneeSco !== 'all' ? schoolYears.find(sy => sy.id === filterAnneeSco) : null;
-    if (selectedSY && selectedSY.date_debut && selectedSY.date_fin) {
-      dateDebut = selectedSY.date_debut;
-      dateFin = selectedSY.date_fin;
-    } else if (period === 'jour') {
+    // Période = source de vérité pour les dates. L'année scolaire devient un simple filtre.
+    if (period === 'jour') {
       dateDebut = format(today, 'yyyy-MM-dd');
       dateFin = dateDebut;
     } else if (period === 'semaine') {
-      const year = today.getFullYear();
-      const jan1 = new Date(year, 0, 1);
+      const jan1 = new Date(yearNum, 0, 1);
       const weekStart = addWeeks(startOfWeek(jan1, { weekStartsOn: 1 }), weekNum - 1);
       dateDebut = format(weekStart, 'yyyy-MM-dd');
       dateFin = format(endOfWeek(weekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
     } else if (period === 'mois') {
-      dateDebut = format(startOfMonth(today), 'yyyy-MM-dd');
-      dateFin = format(endOfMonth(today), 'yyyy-MM-dd');
+      const monthDate = new Date(yearNum, monthIdx, 1);
+      dateDebut = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+      dateFin = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+    } else if (period === 'annee') {
+      // Année scolaire entière (si sélectionnée), sinon année civile en cours
+      const sy = filterAnneeSco !== 'all' ? schoolYears.find(s => s.id === filterAnneeSco) : null;
+      if (sy && sy.date_debut && sy.date_fin) {
+        dateDebut = sy.date_debut;
+        dateFin = sy.date_fin;
+      } else {
+        dateDebut = `${yearNum}-01-01`;
+        dateFin = `${yearNum}-12-31`;
+      }
     } else {
       dateDebut = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
       dateFin = format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
@@ -62,6 +71,7 @@ export default function Dashboard() {
     const params = { date_debut: dateDebut, date_fin: dateFin };
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     if (filterPromo !== 'all') params.promotion_id = filterPromo;
+    if (filterAnneeSco !== 'all') params.annee_scolaire_id = filterAnneeSco;
     if (coursOnly) {
       // Filter to activity types flagged as "Cours" in Administration > Types d'activite
       const coursIds = actTypes.filter(a => a.is_cours === true).map(a => a.id);
@@ -74,7 +84,7 @@ export default function Dashboard() {
       setData(d);
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [period, weekNum, filterPromo, filterSemestre, filterAnneeSco, coursOnly, actTypes, promotions, schoolYears]);
+  }, [period, weekNum, monthIdx, yearNum, filterPromo, filterSemestre, filterAnneeSco, coursOnly, actTypes, promotions, schoolYears]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -94,17 +104,38 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-2 items-center">
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-32 h-8 text-xs" data-testid="dashboard-period-trigger"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="filter-active w-32 h-8 text-xs" data-testid="dashboard-period-trigger"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="jour">Jour</SelectItem>
               <SelectItem value="semaine">Semaine</SelectItem>
               <SelectItem value="mois">Mois</SelectItem>
+              <SelectItem value="annee">Année</SelectItem>
             </SelectContent>
           </Select>
           {period === 'semaine' && (
             <Select value={String(weekNum)} onValueChange={v => setWeekNum(Number(v))}>
-              <SelectTrigger className="w-20 h-8 text-xs"><SelectValue placeholder={`S${weekNum}`} /></SelectTrigger>
+              <SelectTrigger className="filter-active w-20 h-8 text-xs" data-testid="dashboard-week-picker"><SelectValue placeholder={`S${weekNum}`} /></SelectTrigger>
               <SelectContent>{Array.from({length: 52}, (_, i) => i + 1).map(w => (<SelectItem key={w} value={String(w)}>S{w}</SelectItem>))}</SelectContent>
+            </Select>
+          )}
+          {period === 'mois' && (
+            <Select value={String(monthIdx)} onValueChange={v => setMonthIdx(Number(v))}>
+              <SelectTrigger className="filter-active w-28 h-8 text-xs" data-testid="dashboard-month-picker"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'].map((nm, i) => (
+                  <SelectItem key={i} value={String(i)}>{nm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {(period === 'semaine' || period === 'mois' || period === 'annee') && (
+            <Select value={String(yearNum)} onValueChange={v => setYearNum(Number(v))}>
+              <SelectTrigger className="filter-active w-20 h-8 text-xs" data-testid="dashboard-year-picker"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Array.from({length: 6}, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           )}
         </div>

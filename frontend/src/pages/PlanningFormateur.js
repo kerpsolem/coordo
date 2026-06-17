@@ -53,15 +53,11 @@ export default function PlanningFormateur() {
 
   const fetchData = useCallback(async () => {
     if (!selectedFormateur) return;
-    let dd = dateDebut, df = dateFin;
-    const selectedSY = filterAnneeSco !== 'all' ? schoolYears.find(sy => sy.id === filterAnneeSco) : null;
-    if (selectedSY && selectedSY.date_debut && selectedSY.date_fin) {
-      dd = selectedSY.date_debut;
-      df = selectedSY.date_fin;
-    }
+    const dd = dateDebut, df = dateFin;
     if (!dd || !df) return;
     const params = { formateur_id: selectedFormateur, date_debut: dd, date_fin: df };
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
+    if (filterAnneeSco !== 'all') params.annee_scolaire_id = filterAnneeSco;
     try {
       const [sessRes, cpRes, wlRes] = await Promise.all([
         API.get('/sessions', { params }),
@@ -72,7 +68,7 @@ export default function PlanningFormateur() {
       setCopyAttrs(cpRes.data);
       setWorkload(wlRes.data);
     } catch (e) { console.error(e); }
-  }, [selectedFormateur, dateDebut, dateFin, filterSemestre, filterAnneeSco, schoolYears]);
+  }, [selectedFormateur, dateDebut, dateFin, filterSemestre, filterAnneeSco]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -111,7 +107,7 @@ export default function PlanningFormateur() {
         <div>
           <Label className="text-xs">Periode</Label>
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="filter-active w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="semaine">Semaine</SelectItem>
               <SelectItem value="mois">Mois</SelectItem>

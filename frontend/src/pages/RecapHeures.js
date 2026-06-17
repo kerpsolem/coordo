@@ -53,12 +53,7 @@ export default function RecapHeures() {
   }, [period]);
 
   const fetchData = useCallback(async () => {
-    let dd = dateDebut, df = dateFin;
-    const selectedSY = filterAnneeSco !== 'all' ? schoolYears.find(sy => sy.id === filterAnneeSco) : null;
-    if (selectedSY && selectedSY.date_debut && selectedSY.date_fin) {
-      dd = selectedSY.date_debut;
-      df = selectedSY.date_fin;
-    }
+    const dd = dateDebut, df = dateFin;
     if (!dd || !df) return;
 
     const params = { date_debut: dd, date_fin: df };
@@ -66,6 +61,7 @@ export default function RecapHeures() {
     if (filterPromo !== 'all') params.promotion_id = filterPromo;
     if (filterType !== 'all') params.type_activite_id = filterType;
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
+    if (filterAnneeSco !== 'all') params.annee_scolaire_id = filterAnneeSco;
 
     try {
       const params2 = { date_debut: dd, date_fin: df };
@@ -148,7 +144,7 @@ export default function RecapHeures() {
         <div>
           <Label className="text-xs">Periode</Label>
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="filter-active w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="semaine">Semaine</SelectItem>
               <SelectItem value="mois">Mois</SelectItem>
