@@ -6,6 +6,7 @@ import { Calendar, Clock, Users, AlertTriangle, Gift, Quote, GraduationCap } fro
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { filterCls } from '../lib/filterCls';
 
 const PIE_COLORS = ['#E97451', '#0E1F36', '#F4B393', '#1B3057', '#FFB088', '#395682', '#FBE9D7', '#6C8AB5', '#BF5430', '#9DAFCC', '#2B4A78'];
 
@@ -112,21 +113,21 @@ export default function Dashboard() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
         <Select value={filterPromo} onValueChange={setFilterPromo}>
-          <SelectTrigger className="w-48 h-8 text-xs" data-testid="dashboard-filter-promo"><SelectValue placeholder="Promotion" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterPromo, 'w-48 h-8 text-xs')} data-testid="dashboard-filter-promo"><SelectValue placeholder="Promotion" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes promotions</SelectItem>
             {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
-          <SelectTrigger className="w-40 h-8 text-xs" data-testid="dashboard-filter-annee"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterAnneeSco, 'w-40 h-8 text-xs')} data-testid="dashboard-filter-annee"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes annees</SelectItem>
             {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterSemestre} onValueChange={setFilterSemestre}>
-          <SelectTrigger className="w-40 h-8 text-xs" data-testid="dashboard-filter-semestre"><SelectValue placeholder="Semestre" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterSemestre, 'w-40 h-8 text-xs')} data-testid="dashboard-filter-semestre"><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous semestres</SelectItem>
             <SelectItem value="pair">Pairs (S2,S4,S6)</SelectItem>
@@ -134,9 +135,9 @@ export default function Dashboard() {
             {["S1","S2","S3","S4","S5","S6"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <label className="flex items-center gap-1.5 ml-2 cursor-pointer select-none" data-testid="dashboard-cours-only">
+        <label className={`flex items-center gap-1.5 ml-2 cursor-pointer select-none border rounded px-2 py-1 text-xs ${coursOnly ? 'filter-active' : 'border-transparent'}`} data-testid="dashboard-cours-only">
           <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={coursOnly} onChange={e => setCoursOnly(e.target.checked)} />
-          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Cours uniquement</span>
+          <span className="font-medium">Cours uniquement</span>
         </label>
       </div>
 
@@ -199,16 +200,26 @@ export default function Dashboard() {
       {/* Charts: Heures par promotion + Repartition par type */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par promotion</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Heures par promotion / par étudiant</CardTitle></CardHeader>
           <CardContent>
             {data?.heures_par_promotion && Object.keys(data.heures_par_promotion).length > 0 ? (
-              <div className="space-y-2">
-                {Object.entries(data.heures_par_promotion).map(([promo, h]) => (
-                  <div key={promo} className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300 truncate">{promo}</span>
-                    <span className="text-sm font-bold">{h.toFixed(1)}h</span>
-                  </div>
-                ))}
+              <div className="space-y-1">
+                <div className="flex items-center text-[10px] uppercase tracking-wide text-slate-400 font-semibold pb-1 border-b border-slate-200">
+                  <span className="flex-1">Promotion</span>
+                  <span className="w-20 text-right">Total promo</span>
+                  <span className="w-24 text-right">Par étudiant</span>
+                </div>
+                {Object.entries(data.heures_par_promotion).map(([promo, h]) => {
+                  const hStu = data?.heures_par_etudiant?.[promo] ?? h;
+                  return (
+                    <div key={promo} className="flex items-center text-sm py-0.5">
+                      <span className="flex-1 text-slate-700 dark:text-slate-200 truncate">{promo}</span>
+                      <span className="w-20 text-right font-semibold">{h.toFixed(1)}h</span>
+                      <span className="w-24 text-right font-semibold text-coral-700">{hStu.toFixed(1)}h</span>
+                    </div>
+                  );
+                })}
+                <p className="text-[10px] text-slate-400 italic pt-1">Par étudiant : créneaux parallèles (TD/TP simultanés) comptés une seule fois.</p>
               </div>
             ) : <p className="text-sm text-slate-500">Aucune donnee</p>}
           </CardContent>

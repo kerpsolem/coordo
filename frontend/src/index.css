@@ -136,3 +136,22 @@ code {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Active filter highlight (auto applied to triggers whose value is set + filter-aware) */
+/* Generic class: .filter-active. Apply via cn() when filter is not 'all' / not empty. */
+.filter-active,
+button.filter-active,
+[role="combobox"].filter-active,
+input.filter-active {
+  background-color: #FFE2D8 !important;          /* coral-100 */
+  border-color: #E97451 !important;              /* coral-500 */
+  color: #B04A2D !important;                     /* coral-700 */
+  font-weight: 600;
+  box-shadow: 0 0 0 1px #E97451 inset;
+}
+.filter-active:hover { background-color: #FFCBB9 !important; }
+.dark .filter-active {
+  background-color: rgba(233, 116, 81, 0.18) !important;
+  border-color: #F58A6C !important;
+  color: #FFCBB9 !important;
+}

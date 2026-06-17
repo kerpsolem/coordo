@@ -1723,6 +1723,8 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
     act_types = {a["id"]: a for a in await crud_list("activity_types")}
 
     heures_par_promo = {}
+    heures_par_etudiant = {}  # un étudiant = sum unique timeslots (date+heure) par promo
+    seen_slots = {}  # promo_id -> set of (date, heure_debut, heure_fin)
     heures_par_formateur = {}
     heures_par_type = {}
     for s in sessions:
@@ -1730,6 +1732,14 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
         pname = promotions.get(pid, {}).get("nom", "Inconnu")
         dur = s.get("duree", 0)
         heures_par_promo[pname] = heures_par_promo.get(pname, 0) + dur
+        # Heures par étudiant : un étudiant ne peut être qu'à un seul endroit à un moment donné,
+        # donc on dédoublonne les créneaux parallèles (TD/TP en sous-groupes simultanés).
+        slot_key = (s.get("date"), s.get("heure_debut"), s.get("heure_fin"))
+        if pname not in seen_slots:
+            seen_slots[pname] = set()
+        if slot_key not in seen_slots[pname]:
+            seen_slots[pname].add(slot_key)
+            heures_par_etudiant[pname] = heures_par_etudiant.get(pname, 0) + dur
         tid = s.get("type_activite_id", "")
         tname = act_types.get(tid, {}).get("nom", "Inconnu")
         heures_par_type[tname] = heures_par_type.get(tname, 0) + dur
@@ -1796,6 +1806,7 @@ async def dashboard(date_debut: Optional[str] = None, date_fin: Optional[str] = 
         "total_seances": len(sessions),
         "total_formateurs": len(formateurs),
         "heures_par_promotion": heures_par_promo,
+        "heures_par_etudiant": heures_par_etudiant,
         "heures_par_formateur": heures_par_formateur,
         "heures_par_type": heures_par_type,
         "formateurs_absents": abs_period,

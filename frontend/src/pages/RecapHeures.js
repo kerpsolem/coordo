@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Filter, BarChart3 } from 'lucide-react';
+import { filterCls } from '../lib/filterCls';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addWeeks, getWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -158,21 +159,21 @@ export default function RecapHeures() {
         <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40" /></div>
         <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40" /></div>
         <Select value={filterFormateur} onValueChange={setFilterFormateur}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Formateur" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterFormateur, 'w-44')}><SelectValue placeholder="Formateur" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous formateurs</SelectItem>
             {formateurs.map(f => <SelectItem key={f.id} value={f.id}>{f.initiales} - {f.prenom} {f.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterPromo} onValueChange={setFilterPromo}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Promotion" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterPromo, 'w-44')}><SelectValue placeholder="Promotion" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes promotions</SelectItem>
             {promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterSemestre} onValueChange={setFilterSemestre}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="Semestre" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterSemestre, 'w-36')}><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous</SelectItem>
             <SelectItem value="pair">Pairs</SelectItem>
@@ -181,14 +182,14 @@ export default function RecapHeures() {
           </SelectContent>
         </Select>
         <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterAnneeSco, 'w-40')}><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes annees</SelectItem>
             {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterType, 'w-36')}><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous types</SelectItem>
             {actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}

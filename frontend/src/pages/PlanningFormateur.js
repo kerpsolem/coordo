@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Clock, Users, BarChart3 } from 'lucide-react';
+import { filterCls } from '../lib/filterCls';
 import { format, startOfWeek, endOfWeek, addWeeks, getWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -103,7 +104,7 @@ export default function PlanningFormateur() {
         <div>
           <Label className="text-xs">Formateur</Label>
           <Select value={selectedFormateur} onValueChange={setSelectedFormateur}>
-            <SelectTrigger className="w-52" data-testid="select-formateur"><SelectValue placeholder="Choisir un formateur" /></SelectTrigger>
+            <SelectTrigger className={filterCls(selectedFormateur, 'w-52')} data-testid="select-formateur"><SelectValue placeholder="Choisir un formateur" /></SelectTrigger>
             <SelectContent>{formateurs.map(f => <SelectItem key={f.id} value={f.id}>{f.initiales} - {f.prenom} {f.nom}</SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -121,7 +122,7 @@ export default function PlanningFormateur() {
         <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40" /></div>
         <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40" /></div>
         <Select value={filterSemestre} onValueChange={setFilterSemestre}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="Semestre" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterSemestre, 'w-36')}><SelectValue placeholder="Semestre" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous</SelectItem>
             <SelectItem value="pair">Pairs (S2,S4,S6)</SelectItem>
@@ -130,7 +131,7 @@ export default function PlanningFormateur() {
           </SelectContent>
         </Select>
         <Select value={filterAnneeSco} onValueChange={setFilterAnneeSco}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterAnneeSco, 'w-40')}><SelectValue placeholder="Annee scolaire" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Toutes annees</SelectItem>
             {schoolYears.map(sy => <SelectItem key={sy.id} value={sy.id}>{sy.nom}</SelectItem>)}

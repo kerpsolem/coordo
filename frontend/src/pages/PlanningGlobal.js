@@ -9,6 +9,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { ChevronLeft, ChevronRight, Plus, Check, Edit2, Columns, GripVertical, ZoomIn, ZoomOut, MessageSquare, ListTodo, MapPin, Clock, GraduationCap, Info } from 'lucide-react';
+import { filterCls } from '../lib/filterCls';
 import { format, addDays, startOfWeek, getWeek, addWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -984,7 +985,7 @@ export default function PlanningGlobal() {
         ))}
         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
         <Select value={filterUE} onValueChange={setFilterUE}>
-          <SelectTrigger className="w-44 h-8 text-xs" data-testid="filter-ue"><SelectValue placeholder="UE" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterUE, 'w-44 h-8 text-xs')} data-testid="filter-ue"><SelectValue placeholder="UE" /></SelectTrigger>
           <SelectContent className="max-h-72">
             <SelectItem value="all">Toutes les UE</SelectItem>
             {ues.slice().sort((a, b) => (a.code_ue || '').localeCompare(b.code_ue || '')).map(u => (
@@ -993,14 +994,14 @@ export default function PlanningGlobal() {
           </SelectContent>
         </Select>
         <Select value={filterFormateur} onValueChange={setFilterFormateur}>
-          <SelectTrigger className="w-44 h-8 text-xs" data-testid="filter-formateur"><SelectValue placeholder="Formateur" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterFormateur, 'w-44 h-8 text-xs')} data-testid="filter-formateur"><SelectValue placeholder="Formateur" /></SelectTrigger>
           <SelectContent className="max-h-72">
             <SelectItem value="all">Tous les formateurs</SelectItem>
             {formateurs.map(f => <SelectItem key={f.id} value={f.id}>{f.initiales} - {f.prenom} {f.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-36 h-8 text-xs" data-testid="filter-type"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger className={filterCls(filterType, 'w-36 h-8 text-xs')} data-testid="filter-type"><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous les types</SelectItem>
             {actTypes.map(a => <SelectItem key={a.id} value={a.id}>{a.nom}</SelectItem>)}
