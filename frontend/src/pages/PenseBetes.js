@@ -31,6 +31,7 @@ export default function PenseBetes() {
   const startNew = () => {
     setEditNote({
       titre: '', contenu: '', couleur: COLORS[0], statut: 'non_resolu',
+      date: '', afficher_planning: false,
       position_x: 50 + Math.random() * 200, position_y: 50 + Math.random() * 200
     });
     setShowDialog(true);
@@ -150,6 +151,21 @@ export default function PenseBetes() {
               <div><Label>Titre</Label><Input value={editNote.titre || ''} onChange={e => setEditNote({ ...editNote, titre: e.target.value })} /></div>
               <div><Label>Contenu</Label><textarea className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" rows={4}
                 value={editNote.contenu || ''} onChange={e => setEditNote({ ...editNote, contenu: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="pb-date">Date concernée <span className="text-[10px] text-slate-400">(option)</span></Label>
+                  <Input id="pb-date" type="date" value={editNote.date || ''} onChange={e => setEditNote({ ...editNote, date: e.target.value })} data-testid="pb-date" />
+                </div>
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer select-none" data-testid="pb-afficher-planning">
+                    <input type="checkbox" className="w-4 h-4"
+                      checked={!!editNote.afficher_planning}
+                      onChange={e => setEditNote({ ...editNote, afficher_planning: e.target.checked })}
+                      disabled={!editNote.date} />
+                    <span className={!editNote.date ? 'text-slate-400' : ''}>Afficher sur planning</span>
+                  </label>
+                </div>
+              </div>
               <div>
                 <Label>Couleur</Label>
                 <div className="flex gap-2 mt-1">

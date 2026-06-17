@@ -76,6 +76,8 @@ export default function PlanningGlobal() {
   const { isAdmin } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [absences, setAbsences] = useState([]);
+  const [stickyNotes, setStickyNotes] = useState([]);
+  const [openInfoDay, setOpenInfoDay] = useState(null);
   const [holidays, setHolidays] = useState([]);
   const [vacances, setVacances] = useState([]);
   const [promotions, setPromotions] = useState([]);
@@ -132,19 +134,21 @@ export default function PlanningGlobal() {
     if (selectedPromos.size > 0) params.promotion_id = [...selectedPromos].join(',');
     if (filterSemestre !== 'all') params.semestre = filterSemestre;
     try {
-      const [sessR, absR, holR, vacR, proR, fmR, atR, ueR, domR, sitR, grpR, apR] = await Promise.all([
+      const [sessR, absR, holR, vacR, proR, fmR, atR, ueR, domR, sitR, grpR, apR, snR] = await Promise.all([
         API.get('/sessions', { params }), API.get('/absences/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/holidays', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/vacances/for-period', { params: { date_debut: dateDebut, date_fin: dateFin } }),
         API.get('/promotions'), API.get('/formateurs'), API.get('/activity-types'),
         API.get('/ues'), API.get('/domains'), API.get('/sites'), API.get('/groups'),
-        API.get('/fiches-projet/a-programmer', { params: selectedPromos.size === 1 ? { promotion_id: [...selectedPromos][0] } : {} })
+        API.get('/fiches-projet/a-programmer', { params: selectedPromos.size === 1 ? { promotion_id: [...selectedPromos][0] } : {} }),
+        API.get('/sticky-notes')
       ]);
       setSessions(sessR.data); setAbsences(absR.data); setHolidays(holR.data);
       setVacances(vacR.data);
       setPromotions(proR.data); setFormateurs(fmR.data);
       setActTypes(atR.data); setUes(ueR.data); setDomains(domR.data); setSites(sitR.data); setGroups(grpR.data);
       setAProgrammer(apR.data || []);
+      setStickyNotes(snR.data || []);
     } catch (e) { console.error(e); }
   }, [currentDate, selectedPromos, filterSemestre]);
 
@@ -689,10 +693,45 @@ export default function PlanningGlobal() {
               const dayStr = format(day, 'yyyy-MM-dd');
               const dayAbs = getAbsForDay(dayStr);
               const ferie = holidayMap[dayStr];
+              const dayNotes = stickyNotes.filter(n => n.afficher_planning && n.date === dayStr);
               return (
-                <div key={i} className={`border-b border-r border-slate-200 dark:border-slate-700 text-center ${ferie ? 'bg-purple-50 dark:bg-purple-950/30' : 'bg-slate-50 dark:bg-slate-800/30'}`}>
+                <div key={i} className={`relative border-b border-r border-slate-200 dark:border-slate-700 text-center ${ferie ? 'bg-purple-50 dark:bg-purple-950/30' : 'bg-slate-50 dark:bg-slate-800/30'}`}>
                   <div className="text-slate-500 capitalize pt-1" style={{ fontSize: baseFontSmall }}>{format(day, 'EEEE', { locale: fr })}</div>
-                  <div className="font-bold pb-1" style={{ fontSize: baseFontBlock + 1 }}>{format(day, 'd MMM', { locale: fr })}</div>
+                  <div className="font-bold pb-1 flex items-center justify-center gap-1" style={{ fontSize: baseFontBlock + 1 }}>
+                    <span>{format(day, 'd MMM', { locale: fr })}</span>
+                    {dayNotes.length > 0 && (
+                      <button
+                        type="button"
+                        data-testid={`day-info-${dayStr}`}
+                        onClick={(e) => { e.stopPropagation(); setOpenInfoDay(openInfoDay === dayStr ? null : dayStr); }}
+                        className="relative inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold shadow-sm cursor-pointer"
+                        title={`${dayNotes.length} info(s) pour ce jour`}
+                      >
+                        i
+                        {dayNotes.length > 1 && (
+                          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-3 h-3 rounded-full bg-red-500 text-[8px] font-bold">{dayNotes.length}</span>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  {openInfoDay === dayStr && dayNotes.length > 0 && (
+                    <div className="absolute z-50 mt-1 max-w-xs bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-lg shadow-xl text-left p-2 space-y-2"
+                         style={{ marginLeft: '8px', transform: 'translateX(-30%)' }}
+                         data-testid={`day-info-popover-${dayStr}`}
+                         onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1 mb-1">
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">Infos du {format(day, 'd MMM', { locale: fr })}</span>
+                        <button onClick={() => setOpenInfoDay(null)} className="text-slate-400 hover:text-slate-700 text-xs">×</button>
+                      </div>
+                      {dayNotes.map(n => (
+                        <div key={n.id} className="rounded p-2 text-[11px]" style={{ backgroundColor: n.couleur || '#FEF08A' }}>
+                          <div className="font-semibold text-slate-800 mb-0.5">{n.titre}</div>
+                          {n.contenu && <div className="text-slate-700 whitespace-pre-wrap">{n.contenu}</div>}
+                          <div className="text-[9px] text-slate-500 mt-1">— {n.auteur}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {ferie && (
                     <div className="bg-purple-100 dark:bg-purple-900/40 border-t border-purple-200 dark:border-purple-800 px-1 py-0.5 text-purple-700 dark:text-purple-300 font-semibold" style={{ fontSize: baseFontSmall - 1 }}>
                       Ferie · {ferie}
