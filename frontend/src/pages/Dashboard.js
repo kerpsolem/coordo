@@ -12,7 +12,7 @@ const PIE_COLORS = ['#E97451', '#0E1F36', '#F4B393', '#1B3057', '#FFB088', '#395
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
-  const [period, setPeriod] = useState('semaine');
+  const [period, setPeriod] = useState('annee');
   const [weekNum, setWeekNum] = useState(getWeek(new Date(), { weekStartsOn: 1 }));
   const [monthIdx, setMonthIdx] = useState(new Date().getMonth()); // 0-11
   const [yearNum, setYearNum] = useState(new Date().getFullYear());
