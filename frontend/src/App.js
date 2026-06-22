@@ -28,7 +28,7 @@ function ProtectedRoute({ children }) {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/coordo">
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
