@@ -2502,21 +2502,28 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
                     })
 
     # 4) Surcharge : formateur ayant un écart > +10% (ou +5h) par rapport à sa charge
-    #    de référence sur la période (formule équitable selon quotité).
-    total_cours_requis_h = 0.0
-    cours_hours_by_fid = {}  # only cours hours per formateur
+    #    de référence sur la période. Formule strictement alignée sur /workload :
+    #    - On compte toutes les sessions hors TPG (et nécessitant UE comme /recap-ue)
+    #    - total_temps_formateur = Σ durée × max(formateurs réels, nb_formateurs_requis)
+    #    - heures_par_formateur = Σ durée pour les séances où il est assigné
+    #    - ref_i = total_temps_formateur × quotité_i / capacité_totale
+    total_temps_formateur_h = 0.0
+    cours_hours_by_fid = {}
     for s in sessions:
-        dur = s.get("duree", 0) or 0
+        if not s.get("ue_id"):
+            continue
+        dur = float(s.get("duree", 0) or 0)
         tid = s.get("type_activite_id", "")
         at = act_types_map.get(tid, {})
-        is_cours = at.get("is_cours", False)
-        if not is_cours:
+        type_name = (at.get("nom") or "").strip().upper()
+        if type_name == "TPG":
             continue
         nb_req = s.get("nb_formateurs_requis")
         if nb_req is None:
-            nm = (at.get("nom") or "").strip().upper()
-            nb_req = 0 if nm == "TPG" else (1 if at.get("is_cours") else 0)
-        total_cours_requis_h += dur * (nb_req or 0)
+            nb_req = 0 if type_name == "TPG" else (1 if at.get("is_cours") else 0)
+        have = len(s.get("formateur_ids") or [])
+        nb_form_used = have if have > 0 else (nb_req or 0)
+        total_temps_formateur_h += dur * nb_form_used
         for fid in (s.get("formateur_ids") or []):
             cours_hours_by_fid[fid] = cours_hours_by_fid.get(fid, 0) + dur
     all_formateurs = await crud_list("formateurs")
@@ -2526,7 +2533,7 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
     for f in all_formateurs:
         fid = f["id"]
         quotite = (f.get("quotite", 100) or 100) / 100.0
-        ref = (total_cours_requis_h * quotite / capacite_totale) if capacite_totale > 0 else 0
+        ref = (total_temps_formateur_h * quotite / capacite_totale) if capacite_totale > 0 else 0
         heures = cours_hours_by_fid.get(fid, 0)
         ecart = heures - ref
         tol = max(ref * 0.10, 5.0)
@@ -2534,7 +2541,7 @@ async def get_alerts(date_debut: Optional[str] = None, date_fin: Optional[str] =
             alerts.append({
                 "type": "warning", "category": "surcharge",
                 "title": "Surcharge formateur",
-                "message": f"{f.get('prenom','?')} {f.get('nom','?')} : {heures:.1f}h de cours assignées vs {ref:.1f}h de référence (écart +{ecart:.1f}h, > +{tol:.0f}h).",
+                "message": f"{f.get('prenom','?')} {f.get('nom','?')} : {heures:.1f}h assignées vs {ref:.1f}h de référence (écart +{ecart:.1f}h, > +{tol:.0f}h).",
                 "context": f"{date_debut} → {date_fin}",
                 "session_id": None, "date": date_debut,
                 "heure_debut": None, "heure_fin": None,
