@@ -136,6 +136,8 @@ export default function PlanningPromotion() {
                       <div className="p-1.5 space-y-1 min-h-[100px]">
                         {daySessions.map(s => {
                           const at = atMap[s.type_activite_id] || {};
+                          const sGroupIds = s.group_ids || (s.group_id ? [s.group_id] : []);
+                          const grpLabel = sGroupIds.map(gid => grpMap[gid]?.libelle).filter(Boolean).join(', ');
                           return (
                             <div key={s.id}
                                  className={`p-1.5 rounded text-[10px] border ${canEdit ? 'cursor-pointer hover:ring-2 hover:ring-coral-400 transition' : ''}`}
@@ -146,9 +148,14 @@ export default function PlanningPromotion() {
                                 <span>{at.nom}</span>
                                 {s.saisi && <span className="text-emerald-700 text-[9px] font-bold">✓ saisi</span>}
                               </div>
+                              {s.intitule && (
+                                <div className="font-semibold text-slate-900 dark:text-slate-100 truncate" title={s.intitule}>{s.intitule}</div>
+                              )}
                               <div className="text-slate-600 dark:text-slate-400">{s.heure_debut}-{s.heure_fin}</div>
-                              <div className="font-bold text-black dark:text-white">{(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).join(', ')}</div>
-                              {s.intitule && <div className="truncate">{s.intitule}</div>}
+                              <div className="font-bold text-blue-700 dark:text-blue-300 truncate">{(s.formateur_ids || []).map(fid => fmMap[fid]?.initiales).join(', ')}</div>
+                              {grpLabel && (
+                                <div className="text-coral-700 dark:text-coral-300 font-medium truncate" title={grpLabel}>👥 {grpLabel}</div>
+                              )}
                               {(s.site_ids?.length > 0 || s.site_id) && (
                                 <div className="text-[9px] text-slate-500 truncate">📍 {(s.site_ids || [s.site_id]).map(sid => sites.find(x => x.id === sid)?.nom).filter(Boolean).join(', ')}</div>
                               )}
