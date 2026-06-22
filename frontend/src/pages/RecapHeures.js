@@ -20,7 +20,9 @@ const CHART_COLORS = ['#6366F1', '#34D399', '#FBBF24', '#F43F5E', '#A78BFA', '#0
 
 export default function RecapHeures() {
   const [data, setData] = useState(null);
-  const [period, setPeriod] = useState('mois');
+  const [period, setPeriod] = useState('annee');
+  const [monthIdx, setMonthIdx] = useState(new Date().getMonth());
+  const [yearNum, setYearNum] = useState(new Date().getFullYear());
   const [filterFormateur, setFilterFormateur] = useState('all');
   const [filterPromo, setFilterPromo] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -42,15 +44,22 @@ export default function RecapHeures() {
   const [workload, setWorkload] = useState(null);
 
   useEffect(() => {
-    const today = new Date();
     if (period === 'mois') {
-      setDateDebut(format(startOfMonth(today), 'yyyy-MM-dd'));
-      setDateFin(format(endOfMonth(today), 'yyyy-MM-dd'));
-    } else if (period === 'semaine') {
-      setDateDebut(format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
-      setDateFin(format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+      const d = new Date(yearNum, monthIdx, 1);
+      setDateDebut(format(startOfMonth(d), 'yyyy-MM-dd'));
+      setDateFin(format(endOfMonth(d), 'yyyy-MM-dd'));
+    } else if (period === 'annee') {
+      const sy = filterAnneeSco !== 'all' ? schoolYears.find(s => s.id === filterAnneeSco) : null;
+      if (sy && sy.date_debut && sy.date_fin) {
+        setDateDebut(sy.date_debut);
+        setDateFin(sy.date_fin);
+      } else {
+        setDateDebut(`${yearNum}-01-01`);
+        setDateFin(`${yearNum}-12-31`);
+      }
     }
-  }, [period]);
+    // pour 'periode', l'utilisateur saisit manuellement
+  }, [period, monthIdx, yearNum, filterAnneeSco, schoolYears]);
 
   const fetchData = useCallback(async () => {
     const dd = dateDebut, df = dateFin;
@@ -144,16 +153,40 @@ export default function RecapHeures() {
         <div>
           <Label className="text-xs">Periode</Label>
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="filter-active w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="filter-active w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="semaine">Semaine</SelectItem>
+              <SelectItem value="annee">Année</SelectItem>
               <SelectItem value="mois">Mois</SelectItem>
-              <SelectItem value="custom">Personnalise</SelectItem>
+              <SelectItem value="periode">Période (du…au…)</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="w-40" /></div>
-        <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="w-40" /></div>
+        {period === 'mois' && (
+          <>
+            <Select value={String(monthIdx)} onValueChange={v => setMonthIdx(Number(v))}>
+              <SelectTrigger className="filter-active w-28 h-9" data-testid="rh-month"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'].map((nm, i) => (
+                  <SelectItem key={i} value={String(i)}>{nm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(yearNum)} onValueChange={v => setYearNum(Number(v))}>
+              <SelectTrigger className="filter-active w-24 h-9" data-testid="rh-year"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Array.from({length: 6}, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        {period === 'periode' && (
+          <>
+            <div><Label className="text-xs">Du</Label><Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="filter-active w-40" /></div>
+            <div><Label className="text-xs">Au</Label><Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className="filter-active w-40" /></div>
+          </>
+        )}
         <Select value={filterFormateur} onValueChange={setFilterFormateur}>
           <SelectTrigger className={filterCls(filterFormateur, 'w-44')}><SelectValue placeholder="Formateur" /></SelectTrigger>
           <SelectContent>
